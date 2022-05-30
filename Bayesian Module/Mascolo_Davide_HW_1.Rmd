@@ -1,0 +1,852 @@
+---
+title: "Homework #01"
+subtitle: "Statistical Methods in Data Science II & Lab"
+author: "Davide Mascolo, 2001991"
+date: "22 aprile 2022"
+output: html_document
+---
+
+## **Ex 1**
+
+## Fully Bayesian conjugate analysis of Rome car accidents
+We consider the car accident in Rome (year 2016). The variable **car_accidents** contains the number of car accidents $Y_i = y_i$ occurred in a specific weekday during a specific hour of the day in some of the weeks of 2016. The main goal is using the observed outcomes of the number of car accidents to do a fully Bayesian analysis using as a statistical model a conditionally **i.i.d. Poisson** distribution with unknown parameter.
+```{r, include = F}
+## Import libraries
+library(kableExtra)
+library(ggplot2)
+library(latex2exp)
+library(vecsets)
+library(TeachingDemos)
+```
+
+```{r, include = F}
+## Import Data
+load('homework_1.RData')
+dat <- subset(roma, subset = sign_up_number == 104)
+```
+
+<p>&nbsp;</p>
+
+### 1. Describing the observed data
+
+<p>&nbsp;</p>
+
+As we can see, the dataset contains 19 observations for 5 
+variables.
+```{r, echo = F, comment = NA}
+## Exploring data
+str(dat)
+```
+
+<p>&nbsp;</p>
+
+Let's focus on the variable of interest, that is **car_accidents** and we extract some interesting features like the main descriptive statistics and we plot the distribution.
+```{r, include = F}
+## Extract y_obs
+y_obs <- dat$car_accidents
+```
+
+```{r, echo = F}
+## Summary
+kable(as.array(summary(y_obs))) %>% 
+  kable_styling()
+```
+
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = 'center'}
+## Plot distribution of the data
+ggplot(dat, aes(x = car_accidents)) +
+  geom_bar(color = "blue",
+                 fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle('Distribution of car accidents') +
+  xlab(TeX("$y_{i}$")) +
+  ylab('Frequency') +
+  theme_grey() 
+```
+
+<p>&nbsp;</p>
+
+### 2. The ingredients of Bayesian model
+The Bayesian framework is the following one:
+$$\pi(\theta | y_1, ..., y_n) = \frac{\pi(y_1, ..., y_n | \theta) \times \pi(\theta)}{\pi(y_1, ..., y_n)}$$
+
+<p>&nbsp;</p>
+
+This is a way from starting to provide a fully probabilistic structure. In particular, we have tha $Y$ and $\theta$ are unknown parameters, but $Y$ is observable because is a random variable whose distribution depends by an unknown parameter. So, at the time of making of random varibale $Y$, we have that $Y = y_{obs}$.
+From the previous equation, we note that:
+
+- $\pi(y_1, ..., y_n | \theta)$ is the likelihood function
+- $\pi(\theta)$ is the prior distribution
+- $\pi(\theta | y_1, ..., y_n)$ is the posterior distribution
+
+The goal of the Bayesian model is to find the optimal value for the $\theta$ parameter.
+In particular, we focus on the statistical model, that is the conditional distribution for $Y$ and on the prior distribution, that is the initial distribution. This last element is the new component respect to the classical inference framework. This probability depends by different things and information and it is a partial information.
+In the classical approach and in the one based on the likelihood function, the parameter $\theta$ of a statistical model is an unknown but fixed quantity. Bayesian logic, on the other hand, is characterized by assigning a probability to each uncertain event of a problem. Therefore, in the case of parametric problems, the unknown quantity $\theta$ is treated as a random variable. Suppose we assign to $\theta$ a probability distribution describing the variability associated with it. This distribution expresses the uncertainty and information that we have on the parameter before carrying out the experiment that generates the data. The basic idea
+of Bayesian inference is that of combining the two sources of information, the experimental one, provided by the data through the likelihood function, and the extra-experimental one (or pre-experimental), expressed by the prior distribution.
+
+At this point, we know that the average number of accidents for hour occurred in Rome during the day is $3.22$. This expected value corresponds to the theta parameter of the Poisson distribution.
+
+We start by evaluating the likelihood at this value.
+
+<p>&nbsp;</p>
+
+#### Likelihood
+Suppose that, like in this case, $Y = (Y_1, ..., Y_n)$ are such that:
+
+$$
+Y_i | \theta \overset{\mathrm{iid}}{\sim} Poisson(\theta)
+$$
+We know that the joint distribution is:
+$$Y_1, ..., Y_n|\theta \sim f(y_1, ..., y_n|\theta) = \prod_{i=1}^{f} (y_i|\theta) = \prod_{i=1}^{n} \frac{e^{-\theta}\theta^{y_i}}{y_i!}$$
+
+The likelihood function respect the $\theta$ parameter has the following functional form:
+$$
+L_{y_1, ..., y_n}(\theta) \propto e^{-n\theta} \times \theta^{\sum_{i=1}^{n} y_i}
+$$
+We make a plot to show the behavior of data given the parameter $\theta$.
+
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = 'center'}
+## Set theta parameter
+theta <- 3.22
+
+## Plot Likelihood function
+ggplot(mapping = aes(x = y_obs, y = dpois(y_obs, theta))) +
+  geom_line(color = rgb(0.1, 0.4, 0.5, 0.7)) +
+  geom_point(color = rgb(0.1, 0.4, 0.5, 0.7),
+             size = 2) +
+ggtitle(TeX('Poisson distribution with $\\theta = 3.22$'))+
+  xlab(TeX("$y_{i}")) +
+  ylab('Likelihood Value') +
+  theme_grey()
+```
+
+<p>&nbsp;</p>
+
+#### Prior distribution
+We can start with the conjugate analysis in order to combine two sources of information coming from the data. In particular we want to derive the posterior distribution and a great way to derive it is to use a prior distribution, which has the same functional form of the likelihood function.
+Given that the $Y$ has a Poisson distribution model, the suitable prior distribution is the *Gamma distribution*.
+
+The density is:
+$$
+X \sim Gamma(r, s), \,\,\,\,\, f(x) = \frac{r^{s}x^{s-1}e^{-rx}}{\Gamma(s)} \mathbb{I}_{(0, +\infty)}(x)  \,\,\,\,\, r,s > 0
+$$
+where $r$ is the *rate* and $s$ is the *shape*.
+
+<p>&nbsp;</p>
+
+The prior distribution is:
+$$
+\pi(\theta) = \frac{r^{s}\theta^{s-1}e^{-r\theta}}{\Gamma(s)} \mathbb{I}_{(0, +\infty)} (\theta)
+$$
+
+In order to observe the prior distribution, is important to derive the values of *r* and *s*, solving a linear system.
+In particular, we know that: $\mathbb{E}(\theta) = \frac{s}{r}$ and $\mathbb{Var}(\theta) = \frac{s}{r^2}$.
+So, doing a few small algebraic passages we have that:
+$$
+s = \mathbb{E}(\theta) \times \frac{\mathbb{E}(\theta)}{\mathbb{Var}(\theta)} \,\,\, and \,\,\, r = \frac{\mathbb{E}(\theta)}{\mathbb{Var}(\theta)} 
+$$
+
+```{r, echo = F}
+## Prior parameter
+E_x   <- 3.22
+
+## All observations without y_obs
+Var_x <- var(vsetdiff(roma$car_accidents, y_obs))
+
+s_prior <- (E_x^2)/Var_x
+r_prior <- E_x/Var_x
+
+## Updated parameters
+r_post <- r_prior + length(y_obs)
+s_post <- s_prior + sum(y_obs)
+```
+
+The values of $r_{prior}$ and $s_{prior}$ are:
+```{r, echo = F}
+## Check
+kable(cbind.data.frame(r_prior = round(r_prior, 4),
+                       s_prior = round(s_prior, 4)),
+      align = c("c", "c")) %>% 
+  kable_styling()
+```
+
+Now, we can see the plot of the prior distribution:
+```{r, echo = FALSE, fig.align = "center"}
+## Plot prior distribution
+curve(dgamma(x, rate = r_prior, shape = s_prior),
+      from = 0, to = 15,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta)$"),
+      main = "Prior distribution",
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+grid()
+```
+
+#### Posterior distribution
+Exploiting the conjugate analysis, we know that:
+$$\pi(\theta | y_1, ..., y_n) = \frac{\pi(y_1, ..., y_n | \theta) \times \pi(\theta)}{\pi(y_1, ..., y_n)} \, \, \propto \pi(y_1, ..., y_n | \theta) \times \pi(\theta)$$
+
+The posterior is also a **Gamma Distribution** and the parameters are:
+$$
+\pi(\theta | y_1, ..., y_n) \sim Gamma\Bigg(r_{post} = r + n, \, s_{post} = s + \sum_{i=1}^{n} y_{i}\Bigg)
+$$
+
+The values $r_{post}$ and $s_{post}$ are:
+```{r, echo = F}
+## Check
+kable(cbind.data.frame(r_post = round(r_post, 4),
+                       s_post = round(s_post, 4)),
+      align = c("c", "c")) %>% 
+  kable_styling()
+```
+
+Now, we can see the plot of the posterior distribution:
+```{r, echo = F, fig.align = "center"}
+## Plot posterior distribution
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 2.5, to = 5.5,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      main = "Posterior distribution",
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+grid()
+```
+
+<p>&nbsp;</p>
+
+### 3. Inferential findings
+
+<p>&nbsp;</p>
+
+#### 3.1 Point estimates 
+Here, we report different alternative point estimates to summarize the uncertainty of $\theta$.
+
+- **posterior mean**: $\hat{\theta}_{bayes}^{mean} = Mean(\pi(\theta | y_{obs})) = \mathbb{E}(\theta | y_{obs}) = \frac{s_{post}}{r_{post}}$
+```{r, echo = F, comment = NA}
+## Posterior mean
+p_mean <- s_post / r_post
+cat(round(p_mean, 4))
+```
+
+The mean is a measure of centrality and it expresses a synthetic and representative value of the distribution: each observed value contributes to the formation of the mean with an weight/influence equal to its frequency. It represents a measure of location/position and will tend to assume values located in a region of the range containing the predominant mass of the observed data.
+In this case we compute the posterior mean like the expected value of the parameter estimate, usign the posterior distribution.
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+- **posterior median**: $\hat{\theta}_{bayes}^{med} = Median(\pi(\theta | y_{obs})) = {\displaystyle \int_{-\infty}^{\hat{\theta}_{bayes}^{med}}} \pi(\theta | y^{obs}) \,d\theta = {\displaystyle \int_{\hat{\theta}_{bayes}^{med}}}^{+\infty} \pi(\theta | y^{obs}) \,d\theta = \frac{1}{2}$
+```{r, echo = F, comment = NA}
+## Posterior median
+p_median <- round(qgamma(0.5, shape = s_post,
+                         rate = r_post), 4)
+cat(round(p_median, 4))
+```
+Given the observed levels $y_{1}, ..., y_{n}$, for a variable $Y$, the median denoted by $Med(Y)$, is defined as the quantile at the level $\alpha = 50 \%$.
+
+The median is a measure of:
+
+- *position*: identifies a point in the data range
+- *centrality*: identifies a point that perfectly cuts the distribution into two parts containing the same mass of data, 50% for each one.
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+- **posterior mode**: $\hat{\theta}_{bayes}^{mode} = Mode(\pi(\theta | y_{obs})) = argmax_{\theta \in \Theta} \pi(\theta | y_{obs}) = \frac{s_{post} - 1}{r_{post}}$
+```{r, echo = F, comment = NA}
+## Posterior mode
+p_mode <- round(((s_post - 1) / r_post), 4)
+cat(round(p_mode, 4))
+```
+Unlike the mean and the median, the mode can be calculated for any type of variable.
+Given the observed levels/label $y_{1}, ..., y_{n}$, for a variable $Y$, it is defined as mode and it is indicated by $Mod(Y)$:
+
+- the most frequent observed level/label in non-continuous data
+- the level of maximum density in continuous data
+
+The mode is a measure of:
+
+- position: identifies a point in the data range
+- centrality: in a very specific case
+
+<p>&nbsp;</p>
+
+Now, we can see the plot of the posterior distribution with the posterior estimates computed above.
+```{r, echo = F, fig.align = "center"}
+## Plot posterior distribution
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 2.5, to = 5.5,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+## Mean
+abline(v = p_mean, lty = 1, col = "black")
+## Median
+abline(v = p_median, lty = 1, col = "green")
+## Mode
+abline(v= p_mode, lty = 1, col = "red")
+
+legend("topright", legend = c("Mean", "Median", "Mode"),
+       col = c("black", "green", "red"),
+       lty = 1, cex = 0.8)
+grid()
+title("Point estimates of posterior distribution")
+```
+
+The point estimates calculated previously are used to get a general idea of the behavior of the posterior distribution, of which the exact reference model is not known. In this case the three calculated indices are almost the same, but the choice of the reference index for the due evaluations depends on the problem under examination. We know, however, that usually the **mean** and the **median** tend to have the same behavior, with the median being more robust to the outliers than the mean being more sensitive. The **mode**, on the other hand, is a more precise index that indicates the maximum theta value of the posterior distribution.
+
+As we can see from the plot, the posterior probability distribution is very close to the normal distribution. We can see this both from the shape of the distribution, very similar to a bell, but also from the fact that the calculated indices are very close to each other. Recall, homever, that in the normal distribution these three indices correspond to each other. In fact, this distribution is slightly positively skewed.
+
+<p>&nbsp;</p>
+
+#### 3.2 Posterior uncertainty
+
+<p>&nbsp;</p>
+
+In order to evaluate the uncertainty of our estimate, we can first look at the range of data in which the posterior distribution moves and then calculate dispersion indices to get a more depth idea of the variability of this estimate.
+
+```{r, echo = F}
+## Estimate Variance
+var_post <- s_post / (r_post^2)
+```
+
+```{r, echo = F, fig.align = "center"}
+## Plot posterior distribution uncertainty
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 2.5, to = 5.5,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+## Mean
+abline(v = p_mean, lty = 1, col = "black")
+## Variance
+abline(v = (p_mean - var_post), lty = 2, col = "red")
+abline(v = (p_mean + var_post), lty = 2, col = "red")
+
+legend("topright", legend = c("Mean", "Var"),
+       col = c("black", "red"),
+       lty = c(1, 2), cex = 1)
+grid()
+title("Posterior distribution uncertainty")
+```
+
+The posterior variance is:
+```{r, echo = F, comment = NA}
+## Check
+cat(round(var_post, 4))
+```
+We compute the uncertainty of the posterior distribution with the posterior variance respect to the posterior mean. Tha value of the variance is low and this means that the estimate of the expected value is consistent. 
+
+<p>&nbsp;</p>
+
+#### 3.3 Interval Estimates
+
+<p>&nbsp;</p>
+
+There are cases in which it is preferable to calculate a point estimate of the parameter of interest (as done previously) and other cases in which it is optimal to calculate an estimate interval, or a range of values in which the parameter of interest will fall with some level of confidence. This procedure in classical inference is called confidence intervals, while in Bayesian inference it is called **credible intervals**.
+
+In general, we can define an uncertainty interval as follows:
+$$
+[\hat\theta_{L}; \hat\theta_{U}] = {\displaystyle \int_{\hat\theta_{L}}^{\hat\theta_{U}}} \pi(t | y_{obs}) \,\,\, dt = 0,95
+$$
+
+In the Bayesian framework there are two ways to calculate credible intervals:
+
+- **equal-tail credible intervals**:
+$\hat\theta^{ET}_{L} = \alpha/2 \times quantile \,\,\, \pi(.|y_{obs}) \,\,\,\,\,\,\,\,\,\,\,\,\, \hat\theta^{ET}_{U} = 1 - \alpha/2 \times quantile \,\,\, \pi(.|y_{obs})$
+
+- **HDP (highest posterior density)**
+$[\hat\theta^{HDP}_{L}; \hat\theta^{HDP}_{U}] = \{ \theta \in \Theta : \Pi(\theta | y_{obs}) \ge \lambda_{1 - \alpha} \}$ where $\lambda_{1 - \alpha}$ is a subset of $\Theta$
+
+We want a shortest interval and in general we prefer to compute the HDP approach, because:
+$$
+\hat\theta^{HDP}_{U} - \hat\theta^{HDP}_{L} \le \hat\theta^{ET}_{U} - \hat\theta^{ET}_{L}
+$$
+
+```{r, echo = F}
+## Implementation
+posterior_qf <- function(x) qgamma(x,
+                                   shape = s_post,
+                                   rate = r_post)
+posterior_icdf <- function(x) qgamma(x,
+                                     shape = s_post,
+                                     rate = r_post)
+```
+
+<p>&nbsp;</p>
+
+The HDP regions is:
+```{r, echo = F, comment = NA}
+## Credible Intervals
+lb <- round(hpd(posterior.icdf = posterior_qf,
+                conf = 0.95, tol = 0.00000001)[1], 4)
+ub <- round(hpd(posterior.icdf = posterior_qf,
+                conf = 0.95, tol = 0.00000001)[2], 4)
+kable(cbind.data.frame(Lower_Bound = lb,
+                       Upper_Bound = ub),
+      align = c("c", "c")) %>% 
+  kable_styling()
+```
+
+```{r, echo = F, fig.align = "center"}
+## Plot HDP Intervals
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 2.5, to = 5.5,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+## Mean
+abline(v = p_mean, lty = 1, col = "black")
+## Credible Intervals
+abline(v = hpd(posterior.icdf = posterior_qf,
+               conf = 0.95,
+               tol = 0.00000001)[1],
+       lty = 2, col = "red")
+abline(v = hpd(posterior.icdf = posterior_qf,
+               conf = 0.95,
+               tol = 0.00000001)[2],
+       lty = 2, col = "red")
+
+legend("topright", legend = c("Mean", "HDP Interval"),
+       col = c("black", "red"),
+       lty = c(1, 2), cex = 0.8)
+grid()
+title(TeX("HDP intervals with $\\alpha = 0.05 \\%"))
+```
+
+<p>&nbsp;</p>
+
+#### 3.4 Differences between the prior and the posterior
+
+<p>&nbsp;</p>
+
+The **prior probability distribution** $\pi(\theta)$, often simply called the prior, of an uncertain quantity is the probability distribution that would express one's beliefs about this quantity before some evidence is taken into account.
+
+Once we get some information from the knowledge (certainty) of the outcome $Y = y$ our beliefs of the unknown parameter $\theta$ must be updated coherently though the rule of probability. So, the **posterior probability distribution** $\pi(\theta | y)$ contains all the updated information on the unknown quantity of interest which is still unknown (i.e. uncertain) buth with a revised state of uncertainty which embodies both my prior information and the information derived from observing the data $Y = y$.
+
+So, we can summarize in this way:
+$Posterior = Prior +  Likelihood\,\,\,$, where $+$ stand for Bayes rule.
+
+We can see the difference looking at the plots.
+```{r, echo = F, fig.align = "center"}
+par(mfrow = c(1, 2))
+## Plot prior distribution
+curve(dgamma(x, rate = r_prior, shape = s_prior),
+      from = 0, to = 15,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta)$"),
+      main = "Prior distribution",
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+grid()
+
+## Plot posterior distribution
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 2.5, to = 5.5,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      main = "Posterior distribution",
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+grid()
+```
+
+<p>&nbsp;</p>
+
+Looking at the summary statistics
+```{r, echo = F}
+## Prior estimates
+## Mean
+pr_mean <- E_x
+## Median
+pr_median <- round(qgamma(0.5, shape = s_prior,
+                          rate = r_prior), 4)
+## Mode
+pr_mode <- round(((s_prior - 1) / r_prior), 4)
+## Variance
+var_pr <- Var_x
+```
+
+
+```{r, echo = F}
+## Prior
+kable(cbind.data.frame(Mean = pr_mean,
+                       Median = round(pr_median,3),
+                       Mode = pr_mode,
+                       Var = round(var_pr, 3)),
+      caption = "Prior") %>% 
+  kable_styling(full_width = F,
+                position = "float_left")
+
+## Posterior
+kable(cbind.data.frame(Mean = round(p_mean, 3),
+                       Median = round(p_median, 3),
+                       Mode = round(p_mode, 3),
+                       Var = round(var_post, 3)),
+      caption = "Posterior") %>% 
+  kable_styling(full_width = F,
+                position = "right")
+```
+
+<p>&nbsp;</p>
+
+Now we can plot together the two probability distributions with their respective statistical indices.
+```{r, echo = F, fig.align = "center"}
+## Plot Posterior Distirbution
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 0, to = 7,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta) + \\pi(\\theta | y_1, ..., y_n)$"),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+## Mean
+abline(v = p_mean, lty = 1, col = "black")
+## Median
+abline(v = p_median, lty = 1, col = "green")
+## Mode
+abline(v = p_mode, lty = 1, col = "red")
+
+## Plot prior distirbution
+curve(dgamma(x, rate = r_prior, shape = s_prior),
+      from = 0, to = 7,
+      col = "orchid", lwd = 2.5,
+      add = T)
+## Mean
+abline(v = pr_mean, lty = 2, col = "black")
+## Median
+abline(v = pr_median, lty = 2, col = "green")
+## Mode
+abline(v = pr_mode, lty = 2, col = "red")
+
+legend("topright", legend = c("Prior", "Posterior",
+                              "Mean", "Median", "Mode"),
+       col = c("orchid", rgb(0.1, 0.4, 0.5, 0.7),
+               "black", "green", "red"),
+       lty = 1, cex = 0.8)
+grid()
+title("Comparison between Prior and Posterior distribution")
+```
+The dashed lines refer to the estimates of the prior distribution probability.
+
+<p>&nbsp;</p>
+
+#### 3.5 Provide a formal definition of the posterior predictive distribution
+
+<p>&nbsp;</p>
+
+Suppose we have:
+$$
+(y^{new}, \, y, \, \theta) = \pi(\theta) f(\theta|y) f(y^{new}|\theta)
+$$
+
+Given an observation $Y = y$, we find what is $Y^{new}$ conditioned on $y$, so:
+
+$$
+Y^{new} | Y = y^{obs} \sim \frac{J(y^{new}, y^{obs})}{J(y^{obs})} = m(y^{new}, y)
+$$
+
+Then, we have:
+$$
+J(y^{new}, y) = \int_{\Theta} J(y^{new}, y, \theta) d\theta = \int_{\Theta} f(y^{new} | \theta) f(y|\theta)\pi(\theta) d\theta \propto \int_{\Theta} f(y^{new}|\theta) \frac{f(y)|\theta) \pi(\theta)}{m(y)} d\theta
+$$
+
+Now, we have that the posterior predictive distribution is:
+$$
+m(y^{new}|y) \propto J(y^{new}, y) \propto \int_{\Theta} f(y^{new}|\theta) \frac{L_{y}(\theta) \pi(\theta)}{m(y)} d\theta = f(y^{new} | \theta) \pi(\theta|y) d\theta
+$$
+
+where $m(y) = \int_{\Theta} f(y|\theta) \pi(\theta) d\theta$ is the prior predictive distribution.
+
+For predicting a nre observation $y^{new}$ we can use the **Negative Binomial Distribution** which is defined as follows:
+$$
+y^{new} | y \sim NegBin\Bigg(p = \frac{r_{prior} + n}{r_{prior} + n + 1}, \,\, m = s_{prior} + sum_{i = 1}^{n}y_i\Bigg)
+$$
+
+```{r, include = F}
+rm(list = ls())
+```
+
+<p>&nbsp;</p>
+
+## **Ex 2**
+
+## Bulb lifetime
+We consider that our job is to delevope an innovative bulb, and we are interested in characterizing it statistically. We test 20 innovative bulbs to determine their lifetimes, and we observe the following data (in hours), which have been sorted from smallest to largest.
+```{r, echo = F, comment = NA}
+## Data observed
+y_obs <- c(1, 13, 27, 43, 73, 75, 154, 196, 220, 297, 344,
+           610, 734, 783, 796, 845, 859, 992, 1066, 1471)
+cat(y_obs)
+```
+
+We assume that their lifetimes $Y_i$ can be modeled using an **exponential distribution** conditionally on $\theta$ where $\psi = 1/\theta$ is the average bulb lifetime.
+The likelihood function is:
+$$
+f(y_1, ..., y_n | \theta) \sim Exponential(\theta)
+$$
+
+$$
+Y_1, ..., Y_n | \sim f(y_1, ..., y_n | \theta) = \prod_{i=1}^{n} (y_i|\theta) = \prod_{i=1}^{n} \theta e^{\theta y_i} = \theta^ne^{-\theta \sum_{i=1}^{n} y_i}
+$$
+
+We extract some interesting features like the main descriptive statistics and we plot the distribution.
+```{r, echo = F, comment = NA}
+## Summary
+kable(as.array(summary(y_obs))) %>% 
+  kable_styling()
+```
+
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = 'center'}
+## Plot distribution of the data
+ggplot(mapping = aes(x = y_obs)) +
+  geom_histogram(color = "blue",
+                 fill = rgb(0.1, 0.4, 0.5, 0.7),
+                 bins = 30) +
+  ggtitle("Distribution of the data") +
+  xlab(TeX("$y_{i}$")) +
+  ylab('Frequency') +
+  theme_grey() 
+```
+
+<p>&nbsp;</p>
+
+
+
+### 1-2-3. Ingredients of the Bayesian model
+
+<p>&nbsp;</p>
+
+As in the previous exercise, we start by choosing the most appropriate prior distribution probability, in this case we pick the **Gamma distribution**:
+$$
+\pi(\theta) = \frac{r^{s}e^{-r\theta}\theta^{s-1}}{\Gamma(s)} \, \, \, \mathbb{I}_{(0, +\infty)} (\theta)
+$$
+
+We know also that $\mathbb{E}(\theta) = 0.003$ and $\mathbb{sd}(\theta) = 0.00173$. So, we can see the plot of the distribution of prior probability.
+
+```{r, echo = F, fig.align = "center"}
+## Set parameters
+E_x      <- 0.003
+Var_x   <- 0.00173^2
+
+r_prior <- E_x / Var_x
+s_prior <- round((E_x^2) / Var_x, 4)
+
+## Updated parameters
+r_post <- r_prior + sum(y_obs)
+s_post <- s_prior + length(y_obs)
+
+## Plot prior distribution
+curve(dgamma(x, rate = r_prior, shape = s_prior),
+      from = 0, to = 0.015,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta)$"),
+      main = "Prior distribution",
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+grid()
+```
+
+As we can see the distribution is not symmetrical; this could be caused by having many values in the right tail. This has to do with an important variability of the distribution, which means that the values are not very stable around the mean value. This is why we are providing only a vague prior opinion on the average lifetime of the bulb.
+
+<p>&nbsp;</p>
+
+### 4. Conjugate Bayesian Analysis
+
+<p>&nbsp;</p>
+
+As in the previous case, we want to derive the posterior distribution using the prior distribution. In particular, we know that: $\, \mathbb{E}(\theta) = \frac{s}{r}$ and $\mathbb{Var}(\theta) = \frac{s}{r^2}$.
+So, doing a few small algebraic passages we have that:
+$$
+s = \mathbb{E}(\theta) \times \frac{\mathbb{E}(\theta)}{\mathbb{Var}(\theta)} \,\,\, and \,\,\, r = \frac{\mathbb{E}(\theta)}{\mathbb{Var}(\theta)} 
+$$
+The values of $r_{prior}$ and $s_{prior}$ are:
+```{r, echo = F}
+## Check
+kable(cbind.data.frame(r_prior = r_prior,
+                       s_prior = s_prior),
+      align = c("c", "c")) %>%
+  kable_styling()
+```
+
+So, we have that:
+$$
+\pi(\theta) \sim Gamma(r = 1002.372, \,\,\, s = 3.007)
+$$
+
+Now, like the previous exercise, we can find the posterior parameters, so we have:
+$$
+\pi(\theta | y_1, ..., y_n) = \frac{\pi(y_1, ..., y_n | \theta) \times \pi(\theta)}{\pi(y_1, ..., y_n)} \, \, \propto \pi(y_1, ..., y_n | \theta) \times \pi(\theta) = \theta^{n}e^{-\theta \sum_{i=1}^{n} y_i} \cdot \theta^{s-1} e^{-r\theta} = \theta^{(s+n)-1}e^{-\theta(r+\sum_{i=1}^{n} y_i)}
+$$
+
+The posterior parameters of the gamma posterior distribution are:
+$$
+\pi(\theta | y_1, ..., y_n) \sim Gamma\Bigg(r_{post} = r \, + \sum_{i=1}^{n} y_{i}, \, s_{post} = s + n\Bigg)
+$$
+The values of $r_{post}$ and $s_{post}$ are:
+```{r, echo = F}
+## Check
+kable(cbind.data.frame(r_post = r_post,
+                       s_post = s_post),
+      align = c("c", "c")) %>%
+  kable_styling()
+```
+
+Now, we can see the the plot of posterior probability distribution and prior probability distribution.
+```{r, echo = F, fig.align = "center"}
+## Plot posterior distirbution
+curve(dgamma(x, rate = r_post, shape = round(s_post, 4)),
+      from = 0, to = 0.015,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta) + \\pi(\\theta | y_1, ..., y_n)$"),
+      ylim = c(0, 900),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+
+## Plot prior distirbution
+curve(dgamma(x, rate = r_prior, shape = s_prior),
+      from = 0, to = 0.015,
+      col = "orchid", lwd = 2.5,
+      add = T)
+
+legend("topright", legend = c("Prior", "Posterior"),
+       col = c("orchid", rgb(0.1, 0.4, 0.5, 0.7)),
+       lty = 1, cex = 0.8)
+grid()
+title("Comparison between Prior and Posterior distribution")
+```
+
+<p>&nbsp;</p>
+
+### 5. Characteristics of the lifetime of our innovative bulb
+
+<p>&nbsp;</p>
+
+As in the previous exercise, we can use point estimates to understand the value of the $\theta$ parameter and look at the credible interval which gives us an idea of the variability of the calculated estimate. The calculated estimates are defined as in the first part of the homework, so we have:
+
+- **posterior mean**: $\hat{\theta}_{bayes}^{mean} = \frac{s_{post}}{r_{post}}$
+```{r, echo = F, comment = NA}
+## Posterior mean
+p_mean <- s_post / r_post
+cat(round(p_mean, 4))
+```
+
+- **posterior median**: $\hat{\theta}_{bayes}^{med} = Median(\pi(\theta | y_{obs})) = {\displaystyle \int_{-\infty}^{\hat{\theta}_{bayes}^{med}}} \pi(\theta | y^{obs}) \,d\theta = {\displaystyle \int_{\hat{\theta}_{bayes}^{med}}}^{+\infty} \pi(\theta | y^{obs}) \,d\theta = \frac{1}{2}$
+```{r, echo = F, comment = NA}
+## Posterior median
+p_median <- round(qgamma(0.5, shape = s_post,
+                         rate = r_post), 4)
+cat(round(p_median, 4))
+```
+
+- **posterior mode**: $\hat{\theta}_{bayes}^{mode} = \frac{s_{post} - 1}{r_{post}}$
+```{r, echo = F, comment = NA}
+## Posterior mode
+p_mode <- round(((s_post - 1) / r_post), 4)
+cat(round(p_mode, 4))
+```
+
+```{r, include = F}
+## Implementation
+posterior_qf <- function(x) qgamma(x,
+                                   shape = s_post,
+                                   rate = r_post)
+posterior_icdf <- function(x) qgamma(x,
+                                     shape = s_post,
+                                     rate = r_post)
+```
+<p>&nbsp;</p>
+
+Now, we can compute the **HDP region** over the posterior uncertainty.
+
+The HDP regions is:
+```{r, echo = F}
+## Credible Intervals
+lb <- round(hpd(posterior.icdf = posterior_qf,
+                conf = 0.95, tol = 0.00000001)[1], 4)
+ub <- round(hpd(posterior.icdf = posterior_qf,
+                conf = 0.95, tol = 0.00000001)[2], 4)
+kable(cbind.data.frame(Lower_Bound = lb,
+                       Upper_Bound = ub),
+      align = c("c", "c")) %>% 
+  kable_styling()
+```
+
+```{r, echo = F, fig.align = "center"}
+## Plot HDP Intervals
+curve(dgamma(x, rate = r_post, shape = s_post),
+      from = 0.001, to = 0.004,
+      xlab = expression(theta),
+      ylab = TeX("$\\pi(\\theta | y_1, ..., y_n)$"),
+      col = rgb(0.1, 0.4, 0.5, 0.7), lwd = 2.5)
+
+## Mean
+abline(v = p_mean, lty = 1, col = "black")
+## Median - Mode
+abline(v = p_median, lty = 1, col = "green")
+## Mode
+#abline(v = p_mode, lty = 1, col = "red")
+
+## Credible Intervals
+abline(v = hpd(posterior.icdf = posterior_qf,
+               conf = 0.95,
+               tol = 0.00000001)[1],
+       lty = 2, col = "red")
+abline(v = hpd(posterior.icdf = posterior_qf,
+               conf = 0.95,
+               tol = 0.00000001)[2],
+       lty = 2, col = "red")
+
+legend("topright", legend = c("Mean", "Median-Mode",
+                              "HDP Interval"),
+       col = c("black", "green", "red"),
+       lty = 1, cex = 0.8)
+grid()
+title(TeX("HDP intervals with $\\alpha = 0.05 \\%"))
+```
+
+As we can see, the distribution is not symmetric; this can be seen both by looking at the plot which highlights that the right tail is much longer than the tail on the left, but also by the fact that the point estimates of the median and of the mode coincide, while that of the average does not. Moreover we can also see that the value of $\theta$ is probably equal to 0.002.
+Now let's try to understand if the information we have learned about the behavior of the $\theta$ parameter can be converted into relevant information on $\frac{1}{\theta}$.
+
+So, we have:
+
+- **posterior mean**: $\hat{\psi}_{bayes}^{mean} = \frac{1}{\hat{\theta}_{bayes}^{mean}}$
+```{r, echo = F, comment = NA}
+## Posterior mean
+p_mean_psi <- 1 / p_mean
+cat(round(p_mean_psi, 4))
+```
+
+- **posterior median**: $\hat{\psi}_{bayes}^{med} = \frac{1}{\hat{\theta}_{bayes}^{med}}$
+```{r, echo = F, comment = NA}
+## Posterior median
+p_median_psi <- 1 / p_median
+cat(round(p_median_psi, 4))
+```
+
+- **posterior mode**: $\hat{\psi}_{bayes}^{mode} = \frac{1}{\hat{\theta}_{bayes}^{mode}}$
+```{r, echo = F, comment = NA}
+## Posterior mode
+p_mode_psi <- 1 / p_mode
+cat(round(p_mode_psi, 4))
+```
+
+As we can see, the posterior mean is very close to the true mean of the observations, which means that the value of the $\theta$ parameter should be correct. The estimate thus obtained is more consistent and the results are better.
+
+<p>&nbsp;</p>
+
+### 6. Average Bulb Lifetime
+
+<p>&nbsp;</p>
+
+In this last quesiton, we are interested to know the probability that the average bulb lifetime $\frac{1}{\theta}$ exceeds $550$ hours. Recalling that we have the observed values and we know that the posterior distribution is a gamma distribution, we can evaluate this equation:
+
+$$
+P(\psi > 550 | Y) = P\Big(\frac{1}{\theta} > 550 | Y\Big) = P\Big(\theta < \frac{1}{550} | Y\Big)
+$$
+
+The probability is:
+```{r, echo = F, comment = NA}
+## Probability
+cat(round(pgamma(1/550, shape = s_post, rate = r_post), 4))
+```
+
+We can conclude that only 22% of the bulbs have a lifespan that exceeds 550 hours.
