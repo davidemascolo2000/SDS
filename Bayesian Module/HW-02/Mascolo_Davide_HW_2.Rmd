@@ -1,0 +1,865 @@
+---
+title: "Homework #02"
+subtitle: "Statistical Methods in Data Science II & Lab"
+author: "Davide Mascolo, 2001991"
+date: "06/06/2022"
+output: html_document
+---
+
+## **Ex 1**
+```{r, include = F}
+## Import libraries
+library(ggplot2)
+library(kableExtra)
+library(latex2exp)
+library(gridExtra)
+library(invgamma)
+library(LaplacesDemon)
+library(ggcorrplot)
+
+options(scipen = 999)
+```
+
+```{r, include = F}
+## Create Data
+X <- c(1.0, 1.5, 1.5, 1.5, 2.5, 4.0, 5.0, 5.0, 7.0, 8.0, 8.5,
+       9.0, 9.5, 9.5, 10.0, 12.0, 12.0, 13.0, 13.0, 14.5, 15.5,
+       15.5, 16.5, 17.0, 22.5, 29.0, 31.5)
+Y <- c(1.80, 1.85, 1.87, 1.77, 2.02, 2.27, 2.15, 2.26, 2.47,
+       2.19, 2.26, 2.40, 2.39, 2.41, 2.50, 2.32, 2.32, 2.43,
+       2.47, 2.56, 2.65, 2.47, 2.64, 2.56, 2.70, 2.72, 2.57)
+
+## Merge
+dat <- data.frame(Length = Y, Age = X)
+```
+
+### 1.a - Describe the data
+As the first step we illustrate the characteristics of the statistical model for dealing with the Dugong's data. We observe the lenghts $Y_i$ and ages $x_i$ of 27 dugongs captured off the coast of Queensland have been recorded.
+We can see the first 10 observations, then we compute the main descriptive statistics and plot the distribution.
+```{r, echo = F, comment = NA}
+## Str data
+str(dat)
+```
+
+```{r, echo = F, comment = NA}
+## Summary
+kable(as.array(summary(dat)), align = "cc") %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+We focus on the univariate distributions of the Length and Age.
+```{r, echo = F, fig.align = "center"}
+## Plot distribution Length
+p1 <- ggplot(dat, aes(x = Length)) +
+      geom_histogram(color = "blue",
+                     fill = rgb(0.1, 0.4, 0.5, 0.7),
+                     stat = "bin", binwidth = 0.07) +
+      ggtitle("Distribution of Dugongs Length") +
+      xlab(TeX("$y_{i}$")) +
+      ylab("Frequency") +
+      theme_grey()
+
+## Plot distribution Age
+p2 <- ggplot(dat, aes(x = Age)) +
+      geom_histogram(color = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               stat = "bin", binwidth = 2) +
+      ggtitle("Distribution of Dugongs Age") +
+      xlab(TeX("$y_{i}$")) +
+      ylab("Frequency") +
+      theme_grey()
+
+## Plot
+grid.arrange(p1, p2, ncol = 2)
+```
+
+<p>&nbsp;</p>
+
+We know that for the statistical model it's possible to use a non-linear regression model to explain the data, so we focus on the bivariate distribution. We have two continous variables and we can visualize them with a scatterplot.
+```{r, echo = F, fig.align = "center"}
+## Scatterplot
+ggplot(dat, aes(x = Age, y = Length)) +
+  geom_point(color = "blue",
+             fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Dugong's Data") +
+  xlab("Age") +
+  ylab("Length") +
+  theme_grey()
+```
+
+<p>&nbsp;</p>
+
+### 1.b - Deriving the corresponding likelihood function
+We know that the non-linear regression model is:
+$$Y_i \sim N(\mu_i, \tau^2), \,\,\, where \,\,\, \mu_i = f(x_i) = \alpha - \beta \, \gamma^{x_i}$$
+Model paramters are :
+$$\alpha \sim N(0, \sigma_\alpha^2), \,\,\,
+\alpha \in (1, \infty)$$
+
+$$\beta \sim N(0, \sigma_\beta^2), \,\,\,
+\beta \in (1, \infty)$$
+
+$$\gamma \sim Unif(0, 1), \,\,\,
+\gamma \in (0, 1)$$
+
+$$\tau^2 \sim IG(a, b)(InvergeGamma), \,\,\,
+\tau^2 \in (0, \infty)$$
+
+<p>&nbsp;</p>
+
+So, we define the likelihood function in this way:
+
+$$L_{y_{obs}}(\alpha, \beta, \gamma, x_{i}, \tau^{2}) = \prod_{i=1}^{n} f(y_i|\alpha, \beta, \gamma, x_{i}, \tau^{2}) = \\ = \prod_{i=1}^{n} \frac{1}{\sqrt{2\pi\tau^{2}}} \cdot exp\Big\{-\frac{(y_{i} - \mu_{i})^{2}}{2\tau^{2}} \Big\} = \\ = (2\pi\tau^{2})^{-\frac{n}{2}} \cdot exp\Big\{ -\frac{1}{2\tau^{2}} \sum_{i=1}^{n}\Big( y_{i} - (\alpha - \beta\gamma^{x_{i}})\Big)^{2} \Big\}$$
+
+<p>&nbsp;</p>
+
+### 1.c - Joint prior distribution of the parameters
+We consider the model parameters in order to write the joint prior distribution. It's possible to write the prior like the product of the distribution parameters interested in the problem.
+$$
+\pi(\alpha, \beta, \gamma, \tau^{2}) = \pi_{\alpha}(\alpha) \cdot  \pi_{\beta}(\beta) \cdot \pi_{\gamma}(\gamma) \cdot   \pi_{\tau^2}(\tau^2) \propto exp\Big\{ -\frac{\alpha^{2}}{2\sigma_{\alpha}^{2}} \Big\} \cdot \mathbb{I_{(1,\infty)}(\alpha)} \cdot exp\Big\{ -\frac{\beta^{2}}{2\sigma_{\beta}^{2}} \Big\} \cdot \mathbb{I_{(1,\infty)}}(\beta) \cdot \frac{exp\Big\{ -\frac{b}{\tau^{2}} \Big\}}{\tau^{2(a+1)}} \cdot \mathbb{I_{(0,\infty)}}(\tau^2) \cdot \frac{1}{1-0} \cdot \mathbb{I}_{[0, 1]}(\gamma)
+$$
+So, we can consider:
+
+- **$\alpha$** can be approximated like a Normal distribution with $\mathrm{E}(\alpha) = 0$ and $\mathrm{Var}(\alpha) = \sigma_{\alpha}$.
+
+- **$\beta$** can be treated at the same wat of $\alpha$.
+
+- **$\gamma$** can be approximated by an equal probability for each value.
+
+- **$\tau^2$** is the variance of our error. We can set this value using the hyperparameters of an inverse-gamma distribution.
+
+<p>&nbsp;</p>
+
+### 1.d - Functional form of all full conditionals
+Considering our hyperparameters, we derive analitically the distribution probability functions of each full-conditional posterior.
+
+<p>&nbsp;</p>
+
+for $\alpha$:
+$$
+\pi(\alpha | \beta, \gamma, \tau^2, y_{obs}) \propto exp{\Big(-\frac{n}{2\tau^2} \cdot \alpha^2 + \frac{\sum_{i}(y_i + \beta \cdot \gamma^{x_i})}{\tau^2} \alpha - \frac{1}{2 \sigma_\alpha^2} \Big )} \mathbb{1}_{(0, \infty)} (\alpha)
+$$
+
+<p>&nbsp;</p>
+
+for $\beta$:
+$$
+\pi(\beta | \alpha, \gamma, \tau^2, y_{obs}) \propto exp{\Big(-\frac{\sum_{i} \gamma^{2x_i}}{2\tau^2} \cdot \beta^2 + \frac{(\sum_{i}(\alpha - y_i) \cdot \gamma^{x_i})}{\tau^2} \beta - \frac{1}{2 \sigma_\beta^2} \beta^2 \Big )} \mathbb{1}_{(0, \infty)} (\alpha)
+$$
+
+<p>&nbsp;</p>
+
+for $\gamma$:
+$$
+\pi(\gamma | \alpha, \beta, \tau^2, y_{obs}) \propto exp\Big(-\frac{\sum_{i}({\beta \gamma^{x_i} (\beta \gamma^{x_i} - 2\alpha + 2y_i))}}{2\tau^2}\Big)
+$$
+
+<p>&nbsp;</p>
+
+for $\tau^2$:
+$$
+\pi(\tau^2 | \alpha, \beta, \gamma, y_{obs}) \propto exp\Big(-\frac{\frac{1}{2}\sum_{i}({y_i - \alpha + \beta \gamma^{x_i})^2 + b)}}{\tau^2}\Big)
+$$
+
+<p>&nbsp;</p>
+
+### 1.e - Which distributions can we recognize?
+$$
+\alpha \sim N \Big(\hat{\mu} = \frac{\tau^2 + n \, \sigma_{\alpha}^2}{\tau^2 \cdot \sigma_{\alpha}^2} \, ; \hat{\sigma} = \frac{\sum_{i} (y_i + \beta \cdot \gamma^{x_i})}{\tau^2} \Big)
+$$
+
+<p>&nbsp;</p>
+
+$$
+\beta \sim N(\Big(\hat{\mu} = \frac{\sigma_{\beta}^2 \sum_{i} \gamma^{2x_i} + \tau^2}{\tau^2 \cdot \sigma_{\beta}^2} \, ;
+\hat{\sigma} = \frac{(\sum_{i} (\alpha - y_i) \cdot \gamma^{x_i})}{\tau^2} \Big)
+$$
+
+<p>&nbsp;</p>
+
+$$
+\tau^2 \sim IG \Big(a + \frac{n}{2} \, ; \, \frac{1}{2} \sum_{i}(y_i - \alpha + \beta \gamma^{x_i}) ^ 2 + b\Big )
+$$
+<p>&nbsp;</p>
+
+In conclusion, we have two normal distributions and one inverse gamma distribution, but the distribution of $\gamma$ is unknown.
+
+<p>&nbsp;</p>
+
+### 1.f - Metropolis-within-Gibbs algorithm simulate a Markov chain
+The **Gibbs Sampling** is a Markov chain Monte Carlo (MCMC) algorithm for obtaining a sequence of observations which are approximated from a specified multivariate probability distribution, when direct sampling is difficult. It is called Monte Carlo because it draws samples from specified probability distributions; the Markov chain comes from the fact that each sample is dependent on the previous sample.
+The **Metropolis Hastings (HS)** is used to generate serially correlated draws from a sequence of probability distributions that converge to a given target distribution. We use this algorithm to sample from a non-conjugate conditional posterior within each Gibbs iteration.
+
+#### Gibbs sampling algorithm 
+<p>&nbsp;</p>
+
+**Ingredients**:
+
+- a target multivariate distribution $\theta = (\theta_1,...,\theta_i,...,\theta_k)$ typically a density known up to a proportionality constant.
+- all the full conditionals of the target distribution $\pi(.)$, namely $\phi(\theta_i | \theta_{(i)})$ for $i = 1, ..., k$ are such that they can be simulated from.
+
+**Algorithm**:
+
+- fix the starting values of the parameters components at time $t = 0$, say $\theta_{1}^0 = x_1 \, ,\theta_{2}^0 = x_2 \, , ...,\theta_{k}^0 = x_k$.
+- for $t = 0, 1, 2, ... , T$ iterate the following Gibbs cycle (loop):
+$$
+\theta_{j}^{t+1} \sim \Big (\pi(\theta_{j} | \theta_{1}^{t+1}\, , ...,\theta_{j-1}^{t+1}, \theta_{j+1}^{t}, ...,  \theta_k^t \Big) \,, j = 1, ... , k
+$$
+<p>&nbsp;</p>
+
+#### Metropolis-Hastin algorithm 
+The MH sampler works in this way:
+
+- Define $\pi$ as to be the target density and produce a started candidate of $\theta_{0}$ in order to start the sampling.
+- Let $p_{(x, y)}$ a (conditional) density named (proposal
+distribution). $p_{(x, y)}$ may depend on the value x of the current state of the chain.
+- Draw a candidate $Y_{t+1} \sim p_{x}(y)$. We denote with $y$ the realized candidate $Y_{t+1} = y$.
+- Decide whether or not the candidate is accepted as the next
+state of the chain at time $t + 1$ otherwise set the next state
+equal to the current state $x$ of the chain.
+
+$$
+X_{t+1} = 
+\begin{cases}
+  \text{y with probability} \,\, \alpha(x, y) \\
+  \text{x with probability} \,\, 1-\alpha(x, y)
+\end{cases}
+$$
+
+where $\alpha(x,y)$ = $min\Big\{\frac{\pi(y)p_{y}(x)}{\pi(x)p_{x}(y)},1 \Big\}$
+
+No, we can find the proper hyperparameters and we can see some values from the simulation.
+
+<p>&nbsp;</p>
+
+```{r, echo = F}
+n   <- length(dat$Age) ## Length of dependent variable
+sim <- 10000           ## Simulation size
+
+## Initialize vector
+alpha <- rep(NA, sim)
+beta  <- rep(NA, sim)
+gamma <- rep(NA, sim)
+tau   <- rep(NA, sim)
+
+set.seed(12345)
+## Starting values
+alpha[1] <- 1
+beta[1]  <- 1
+gamma[1] <- 0.5
+tau[1]   <- 0.5
+```
+
+```{r, echo = F}
+## Full conditional distribution
+cond_gamma <- function(gamma, alpha, beta, tau){
+  return(exp(-1/(2*tau) *
+        sum((dat$Length - alpha + beta * gamma^dat$Age)^2)))
+}
+```
+
+```{r, echo = F}
+## Simulation
+for(i in 1:sim){
+  
+  ## Update Alpha
+  alpha[i+1] <- rnorm(1,(sim*sum(dat$Length+beta[i]
+                                 *gamma[i]^dat$Age))/
+                        (n*sim+tau[i]),
+                      sqrt((tau[i]*sim) / (n*sim+tau[i])))
+  
+  ## Update Beta
+  beta[i+1] <- rnorm(1,(sim*sum((alpha[i]-dat$Length) *
+                                  gamma[i]^dat$Age))/
+                       (sim*sum(gamma[i]^(2*dat$Age))+tau[i]),
+        sqrt((tau[i]*sim)/
+               (sim*sum(gamma[i]^(2*dat$Age))+tau[i])))
+  
+  ## Update Gamma
+  p <- runif(1,0,1) 
+  prob <- cond_gamma(p, alpha[i+1], beta[i+1], tau[i]) /
+    cond_gamma(gamma[i], alpha[i+1], beta[i+1], tau[i]) 
+  gamma[i+1] <- ifelse(runif(1, 0, 1) <= prob, p, gamma[i])
+
+  ## Update Tau
+  tau[i+1] <- rinvgamma(1, n/2 + 0.001,
+    0.001+1/2*sum((dat$Length-alpha[i+1]+beta[i+1]*
+                     (gamma[i+1]^dat$Age))^2))
+  
+}
+```
+
+```{r, echo = F}
+## Save the result
+res <- cbind.data.frame(alpha, beta, gamma, tau)
+colnames(res) <- c("Alpha", "Beta", "Gamma", "Tau_Square")
+```
+
+```{r, echo = F}
+## Check
+kable(head(res, 10), align = "cccc") %>% 
+  kable_styling()
+```
+
+<p>&nbsp;</p>
+
+### 1.g - Trace-Plots
+Here, we can see the four univariate trace-plots of the simulation of each parameter.
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Alpha
+p2 <- ggplot(res, aes(x = 1:nrow(res), y = Alpha)) +
+  geom_line(col = rgb(0.1, 0.4, 0.5, 0.7)) +
+  geom_hline(yintercept = mean(res$Alpha), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\alpha$")) +
+  ylim(2, 3) +
+  theme_gray()
+
+## Beta
+p3 <- ggplot(res, aes(x = 1:nrow(res), y = Beta)) +
+  geom_line(col = rgb(0.1, 0.4, 0.5, 0.7)) +
+  geom_hline(yintercept = mean(res$Beta), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\beta$")) +
+  ylim(1, 1.3) +
+  theme_gray()
+
+## Gamma
+p4 <- ggplot(res, aes(x = 1:nrow(res), y = Gamma)) +
+  geom_line(col = rgb(0.1, 0.4, 0.5, 0.7)) +
+  geom_hline(yintercept = mean(res$Gamma), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\gamma$")) +
+  ylim(0, 1) +
+  theme_gray()
+
+## Tau
+p5 <- ggplot(res, aes(x = 1:nrow(res), y = Tau_Square)) +
+  geom_line(col = rgb(0.1, 0.4, 0.5, 0.7)) +
+  geom_hline(yintercept = mean(res$Tau_Square), lty = 2) +
+  ylim(0, 0.30) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\tau^2$")) +
+  theme_gray()
+
+## Plot
+grid.arrange(p2, p3, p4, p5)
+```
+<p>&nbsp;</p>
+
+A traceplot is an essential plot for assessing convergence and diagnosing chain problems. It basically shows the time series of the sampling process and the expected outcome is to produce "white noise".
+<p>&nbsp;</p>
+
+We can also see some descriptive statistics of each parameters.
+<p>&nbsp;</p>
+```{r, echo = F}
+## Alpha
+alpha_table <- rbind.data.frame(summary(res$Alpha))
+colnames(alpha_table) <- c("Min", "1st Qu.", "Median", "Mean",
+                           "3rd Qu.", "Max")
+
+## Beta
+beta_table <- rbind.data.frame(summary(res$Beta))
+colnames(beta_table) <- c("Min", "1st Qu.", "Median", "Mean",
+                           "3rd Qu.", "Max")
+
+## Gamma
+gamma_table <- rbind.data.frame(summary(res$Gamma))
+colnames(gamma_table) <- c("Min", "1st Qu.", "Median", "Mean",
+                           "3rd Qu.", "Max")
+
+## Tau
+tau_table <- rbind.data.frame(summary(res$Tau_Square))
+colnames(tau_table) <- c("Min", "1st Qu.", "Median", "Mean",
+                           "3rd Qu.", "Max")
+
+## Combine
+res_table <-rbind.data.frame(alpha_table, beta_table,
+                             gamma_table, tau_table)
+rownames(res_table) <- c("Alpha", "Beta",
+                         "Gamma", "Tau Square")
+
+## Check
+kable(res_table, align = "cccc") %>% 
+  kable_styling(full_width = F,
+                position = "center")
+```
+
+
+### 1.h - Empirical Averages
+We want to see the empirical average of $\mathbf{\hat{I}}_{t}$ increasing the value of $t \, = \, 1,...,T$. It's possible to define this quantity as follow:
+$$
+\mathbf{I} \approx \mathbf{\hat{I}}_{t} = \frac{1}{T} \sum_{i=1}^{T} h(\theta^{(i)})
+$$
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", fig.height = 6, fig.width = 8, message = F, warning = F}
+## Alpha
+p6 <- ggplot(res, aes(x = 1:nrow(res),
+                      y = cumsum(Alpha)/(1:length(Alpha)))) +
+  geom_line(col = "#0066CC", lwd = 1.2) +
+  geom_hline(yintercept = mean(res$Alpha), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\alpha$")) +
+  ggtitle("Empirical Average Alpha") +
+  ylim(1, 3) +
+  theme_gray()
+
+## Beta
+p7 <- ggplot(res, aes(x = 1:nrow(res),
+                      y = cumsum(Beta)/(1:length(Beta)))) +
+  geom_line(col = "#0066CC", lwd = 1.2) +
+  geom_hline(yintercept = mean(res$Beta), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\beta$")) +
+  ggtitle("Empirical Average Beta") +
+  ylim(1, 1.3) +
+  theme_gray()
+
+## Gamma
+p8 <- ggplot(res, aes(x = 1:nrow(res),
+                      y = cumsum(Gamma)/(1:length(Gamma)))) +
+  geom_line(col = "#0066CC", lwd = 1.2) +
+  geom_hline(yintercept = mean(res$Gamma), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\gamma$")) +
+  ggtitle("Empirical Average Gamma") +
+  ylim(0, 1) +
+  theme_gray()
+
+## Tau
+p9 <- ggplot(res, aes(x = 1:nrow(res),
+            y = cumsum(Tau_Square)/(1:length(Tau_Square)))) +
+  geom_line(col = "#0066CC", lwd = 1.2) +
+  geom_hline(yintercept = mean(res$Tau_Square), lty = 2) +
+  xlab(TeX("$t$")) +
+  ylab(TeX("$\\tau^2$")) +
+  ggtitle("Empirical Average Tau Square") +
+  ylim(0, 0.30) +
+  theme_gray()
+
+## Plot
+grid.arrange(p6, p7, p8, p9)
+```
+The mean of each hyperparameters follows approximately the behaviour of the markov chain, this is a good result.
+
+<p>&nbsp;</p>
+
+### 1.i - Provide estimates for each parameter together with the approximation error and explain how you have evaluated such error.
+We compute the average, the variance and the Monte Carlo Standard Error (MCSE) of each parameter. It's possible to define the variance as follow:
+<p>&nbsp;</p>
+
+$$
+\mathbf{V}[\hat{I}_{t}] = \frac{Var_{\pi}[h(X_{1})]}{T_{eff}} = \Big( 1 + 2 \sum_{k=1}^{\infty} \rho_{k}\Big)\frac{\sigma^{2}}{T} \,\,\,, where \,\,\, T_{eff} = \frac{T}{1+2\sum_{k=1}^{\infty}\rho_{k}}
+$$
+<p>&nbsp;</p>
+The $T_{eff}$ quantity is called **effective sample size**. So, we used the usual variance formula with the number of simulations *n* replaced by the expression of $T_{eff}$, and we get the correct evaluation of the variance of the empirical mean.
+
+The **MCSE** is an estimate of the inaccuracy of MC samples and it's the standard deviation around the posterior mean.
+<p>&nbsp;</p>
+
+```{r, echo = F}
+## Estimates average value for each parameters
+alpha_hat_mean <- mean(res$Alpha)
+beta_hat_mean  <- mean(res$Beta)
+gamma_hat_mean <- mean(res$Gamma)
+tau_hat_mean   <- mean(res$Tau_Square)
+
+## Save
+average_table <- rbind(alpha_hat_mean, beta_hat_mean,
+                       gamma_hat_mean, tau_hat_mean)
+rownames(average_table) <- c("Alpha", "Beta",
+                             "Gamma", "Tau Square")
+colnames(average_table) <- c("Mean")
+average_table <- as.data.frame(average_table)
+
+## Estimates variance value for each parameters
+alpha_hat_var <- var(res$Alpha)/ESS(res$Alpha)
+beta_hat_var  <- var(res$Beta)/ESS(res$Beta)
+gamma_hat_var <- var(res$Gamma)/ESS(res$Gamma)
+tau_hat_var   <- var(res$Tau_Square)/ESS(res$Tau_Square)
+
+## Save
+average_table$Variance <- c(alpha_hat_var, beta_hat_var,
+                        gamma_hat_var, tau_hat_var)
+
+## Estimates MCSE value for each parameters
+alpha_hat_mcse <- MCSE(res$Alpha)
+beta_hat_mcse  <- MCSE(res$Beta)
+gamma_hat_mcse <- MCSE(res$Gamma)
+tau_hat_mcse   <- MCSE(res$Tau_Square)
+
+## Save
+average_table$MCSE <- c(alpha_hat_mcse, beta_hat_mcse,
+                        gamma_hat_mcse, tau_hat_mcse)
+
+## Check
+kable(average_table, align = "ccc") %>% 
+  kable_styling()
+```
+
+The hyperparameter with the largest posterior uncertainty considering the MCMC Variance and the MCSE is $\beta$.
+<p>&nbsp;</p>
+
+### 1.l - Posterior uncertainty
+In order to compute which parameter has the largest posterior uncertainty, we can consider the confidence interval at 95% level for each parameter.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", fig.height = 6, fig.width = 8, message = F, warning = F}
+## CI - Alpha
+q1 <- quantile(res$Alpha, prob = c(0.025, 0.975))
+## Plot
+p10 <- ggplot(res, aes(x = Alpha)) +
+  geom_density(col = "#0066CC", lwd = 1.2) +
+  geom_vline(xintercept = q1[1][[1]], lty = 2) +
+  geom_vline(xintercept = q1[2][[1]], lty = 2) +
+  xlab(TeX("$\\alpha$")) +
+  ylab(TeX("Density")) +
+  ggtitle("Confidence Interval Alpha") +
+  xlim(2.2, 3) +
+  theme_gray()
+
+## CI - Beta
+q2 <- quantile(res$Beta, prob = c(0.025, 0.975))
+## Plot
+p11 <- ggplot(res, aes(x = Beta)) +
+  geom_density(col = "#0066CC", lwd = 1.2) +
+  geom_vline(xintercept = q2[1][[1]], lty = 2) +
+  geom_vline(xintercept = q2[2][[1]], lty = 2) +
+  xlab(TeX("$\\beta$")) +
+  ylab(TeX("Density")) +
+  ggtitle("Confidence Interval Beta") +
+  xlim(0.7, 1.8) +
+  theme_gray()
+
+## CI - Gamma
+q3 <- quantile(res$Gamma, prob = c(0.025, 0.975))
+## Plot
+p12 <- ggplot(res, aes(x = Gamma)) +
+  geom_density(col = "#0066CC", lwd = 1.2) +
+  geom_vline(xintercept = q3[1][[1]], lty = 2) +
+  geom_vline(xintercept = q3[2][[1]], lty = 2) +
+  xlab(TeX("$\\gamma$")) +
+  ylab(TeX("Density")) +
+  ggtitle("Confidence Interval Gamma") +
+  xlim(0.3, 1) +
+  theme_gray()
+
+## CI - Tau
+q4 <- quantile(res$Tau_Square, prob = c(0.025, 0.975))
+## Plot
+p13 <- ggplot(res, aes(x = Tau_Square)) +
+  geom_density(col = "#0066CC", lwd = 1.2) +
+  geom_vline(xintercept = q4[1][[1]], lty = 2) +
+  geom_vline(xintercept = q4[2][[1]], lty = 2) +
+  xlab(TeX("$\\tau^2$")) +
+  ylab(TeX("Density")) +
+  ggtitle("Confidence Interval Tau Square") +
+  xlim(0.003, 0.05) +
+  theme_gray()
+
+## Plot
+grid.arrange(p10, p11, p12, p13)
+```
+
+```{r, echo = F}
+## Range CI
+Lower <- c(q1[1][[1]], q2[1][[1]], q3[1][[1]], q4[1][[1]])
+Upper <- c(q1[2][[1]], q2[2][[1]], q3[2][[1]], q4[2][[1]])
+Range <- Upper - Lower
+
+ci <- cbind.data.frame(Lower, Upper, Range)
+rownames(ci) <- c("Alpha", "Beta", "Gamma", "Tau Square")
+
+## Check
+kable(ci, align = "ccc") %>%
+  kable_styling()
+```
+We can say also here that $\beta$ has the higher posterior uncertainty.
+<p>&nbsp;</p>
+
+### 1.m - Largest Correlation
+Here, we have a heatmap to represent the correlation parameters.
+```{r, echo = F, fig.align = "center", fig.height = 6, fig.width = 8, message = F, warning = F}
+## Correlation
+R <- abs(cor(res))
+ggcorrplot(abs(R), hc.order = TRUE, type = "lower", lab = TRUE)
+```
+<p>&nbsp;</p>
+
+The couple of parameter that has the largest correlation (in absolute value) is Gamma-Beta.
+<p>&nbsp;</p>
+
+### 1.n - Markov chain to approximate the posterior predictive distribution of the length of a dugong with age of 20 years. /1.o - Prediction of a different dugong with age 30.
+<p>&nbsp;</p>
+
+We are interested in this quantity:
+$$
+\pi(y_{pred}) = \int\pi(y_{pred} | \theta) \cdot \pi(\theta) \, d\theta
+$$
+<p>&nbsp;</p>
+We compute the predictions ad to make a comparison between the two different approaches, we compute also the approximation of the posterior predictive distribution and MCSE.
+
+```{r, echo = F, comment = NA}
+## Prevision (Age 20)
+pred_20 <- rep(NA, sim)
+for (i in 1:sim){
+  pred_20[i] <- rnorm(1, alpha[i] - beta[i] * gamma[i]^20,
+                   sqrt(tau[i]))
+}
+
+## Approximation of the posterior distribution
+app_err_20 <- mean(pred_20)
+## MCSE
+mcse_20    <- MCSE(pred_20)
+
+## Prevision (Age 30)
+pred_30 <- rep(NA, sim)
+for (i in 1:sim){
+  pred_30[i] <- rnorm(1, alpha[i] - beta[i] * gamma[i]^30,
+                   sqrt(tau[i]))
+}
+
+## Approximation of the posterior distribution
+app_err_30 <- mean(pred_30)
+## MCSE
+mcse_30    <- MCSE(pred_30)
+
+## Save
+pred_table <- cbind.data.frame(pred_20, pred_30)
+colnames(pred_table) <- c("Age_20", "Age_30")
+
+## Save
+app_erro <- c(app_err_20, app_err_30)
+mcse     <- c(mcse_20, mcse_30)
+x <- cbind(Approximation = app_erro, MCSE = mcse)
+rownames(x) <- c("Pred Age 20", "Pred Age 30")
+
+## Check
+kable(x, align = "cc") %>% 
+  kable_styling()
+```
+
+```{r, echo = F, fig.align = "center", fig.height = 6, fig.width = 8, warning = F}
+## Plot - Age 20
+p14 <- ggplot(pred_table, aes(x = Age_20)) +
+  geom_histogram(color = "blue",
+                 fill = rgb(0.1, 0.4, 0.5, 0.7),
+                 stat = "bin", binwidth = 0.03) +
+  geom_vline(xintercept = mean(pred_20), lty = 2, lwd = 1) +
+  xlim(2, 3.2) +
+  ggtitle("Predictions (20 years old Dugongs)") +
+  xlab(TeX("$\\hat{y_{i}}$")) +
+  ylab("Frequency") +
+  theme_grey()
+
+## Plot - Age 30
+p15 <- ggplot(pred_table, aes(x = Age_30)) +
+  geom_histogram(color = "blue",
+                 fill = rgb(0.1, 0.4, 0.5, 0.7),
+                 stat = "bin", binwidth = 0.03) +
+  geom_vline(xintercept = mean(pred_30), lty = 2, lwd = 1) +
+  xlim(2, 3.2) +
+  ggtitle("Predictions (30 years old Dugongs)") +
+  xlab(TeX("$\\hat{y_{i}}$")) +
+  ylab("Frequency") +
+  theme_grey()
+
+## Plot
+grid.arrange(p14, p15, ncol = 2)
+```
+<p>&nbsp;</p>
+
+### 1.p - Which prediction is less precise?
+The second prediction is less precise as we can see from the MCSE in the table, but also from the plots is clear.
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+
+## **Ex 2**
+Let us consider a Markov Chain $(X_t)_{t \ge 0}$ defined on the state space $S = {1, 2, 3}$.
+<p>&nbsp;</p>
+
+
+### 2.a/2.b - Simulating Markov chain and relative frequencies
+Startin at time $t = 0$ in the state $X_0 = 1$, we simulate the Markov chain with distribution assigned as above for $t = 1000$ consecutives times.
+```{r, echo = F}
+## State Space
+S <- c(1, 2, 3)
+
+## Transiction probability matrix
+tpm <- matrix(c(0, 1/2, 1/2,
+                5/8, 1/8, 1/4,
+                2/3, 1/3, 0), 
+              nrow = 3, byrow = T)
+
+## Define variables
+n             <- 1000
+current_state <- 1
+res           <- rep(NA, n)
+res[1]        <- current_state
+
+## Cycle
+for(i in 1:n){
+  res[i + 1] <- sample(S, size = 1, prob = tpm[res[i], ])
+}
+
+## Save
+res_table   <- as.data.frame(table(res))
+colnames(res_table) <- c("State", "Freq")
+res_table$Perc <- round(res_table$Freq
+                              /sum(res_table$Freq), 3)
+
+## Chek
+kable(res_table[ ,-3], align = "cc") %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", fig.height = 5, fig.width = 5, warning = F}
+## Plot
+ggplot(res_table, aes(x = State, y = Perc)) +
+  geom_bar(stat = "identity",
+           color = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Relative frequencies Monte Carlo Simulation - 1") +
+  geom_text(aes(label = Perc), vjust = 1.6,
+            color = "white", size = 4)+
+  ylab("%") +
+  theme_gray()
+```
+<p>&nbsp;</p>
+
+
+### 2.c - Repeat the simulation
+In this point we repeat the simulation for 500 times and record only the final state at time $t = 1000$ for each of the 500 simulated chains. Then, we compute the relative frequency of the 500 final states.
+<p>&nbsp;</p>
+```{r, echo = F}
+## Define variables
+x_0 <- 2
+n   <- 500
+n_chain <- rep(NA, n)
+
+## Cycle
+for (i in 1:n){
+  nsamp    <- 1000
+  chain    <- rep(NA, nsamp+1) 
+  chain[1] <- x_0
+  for(t in 1:nsamp){
+    chain[t+1] <- sample(S, size = 1,
+                         prob = tpm[chain[t], ])
+  }
+  n_chain[i] <- tail(chain, 1)
+}
+
+## Save
+chain_table   <- as.data.frame(table(chain))
+colnames(chain_table) <- c("State", "Freq")
+chain_table$Perc <- round(chain_table$Freq
+                              /sum(chain_table$Freq), 3)
+
+## Chek
+kable(chain_table[, -3], align = "ccc") %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", fig.height = 5, fig.width = 5, warning = F}
+## Plot
+ggplot(chain_table, aes(x = State, y = Perc)) +
+  geom_bar(stat = "identity",
+           color = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Relative frequencies Monte Carlo Simulation - 2") +
+  geom_text(aes(label = Perc), vjust = 1.6,
+            color = "white", size = 4)+
+  ylab("%") +
+  theme_gray()
+```
+<p>&nbsp;</p>
+
+```{r, echo = F}
+## Look results togheter
+x1 <- c(res_table$Perc)
+x2 <- c(chain_table$Perc)
+
+## Save
+comparison <- rbind(x1, x2)
+colnames(comparison) <- c("State 1", "State 2", "State 3")
+rownames(comparison) <- c("MC Sim 1", "MC Sim 2")
+
+## Check
+kable(comparison, align = "ccc") %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", fig.height = 5, fig.width = 5, warning = F}
+## Plot
+barplot(comparison, main = "Comparison between MC simulations",
+        col = c("red", rgb(0.1, 0.4, 0.5, 0.7)),
+        names.arg = c("state 1", "state 2", "state 3"),
+        legend = c("MC simulation 1","MC simulation 2"), 
+        beside = TRUE, ylim = c(0,0.5),
+        args.legend = c(bty = "n"))
+```
+<p>&nbsp;</p>
+
+In this last case we're trying to approximate the distribution of the invariant distribution using only the kernel matrix $K^{1000}(x_0 = 1, \Omega)$.
+While in the preview simulation we were approximating the same invariant distribution, but using a random walk given by the simulation that start from $x_0$, that is given by the chain originated by the transition kernel
+s.t. :
+$$
+K(x_{t-1}, x_{t}) ,\,\,\ \forall \, t = 1, 2, ..., 1000
+$$
+This first case have the issues of take into account the initial point and the correlation on the preview state in time, so the variance of his estimate his bigger in respect of the second estimate, but instead the first one consume less computation than the second.
+<p>&nbsp;</p>
+
+
+### 2.d - Compute the theoretical stationary distribution *pi* and explain how you have obtained it.
+We can compute the stationary distribution by multiplying the transition matrix by itself until it converges or solving the system or using the eigenvalues.
+The stationary distribution $\pi = (\pi_1, \pi_2, \pi_3)^{T}$ must satisfay the equations:
+$$
+\begin{cases}
+  \pi_1p_{11} + \pi_2p_{21} + \pi_3p_{31} = \pi_1 \\
+  \pi_1p_{12} + \pi_2p_{22} + \pi_3p_{32} = \pi_2 \\
+  \pi_1p_{13} + \pi_2p_{23} + \pi_3p_{33} = \pi_3
+\end{cases}
+$$
+which can be re-written in matrix notation as:
+$$
+\Big (P^T - \lambda I \Big ) \pi = 0
+$$
+corresponding to $\lambda = 1$ or, equivalently, $\pi$ must be in the eigenspace corresponding to the eigenvalue $\lambda = 1$.
+So, we compute:
+1. The eigenvector with the eigenvalue equal to 1.
+2. Check if the eigenvector values are positive.
+3. Check if the $\pi$ is on the stationary distribution of the Markov chain transition probability matrix.
+```{r, echo = F, comment = NA}
+pi <- eigen(t(tpm))$vector[, 1] / sum(eigen(t(tpm))$vector[,1])
+cat(pi)
+```
+This is the solution that satisfies the stationarity equations for our Markov chain with transiction probability matrix.
+<p>&nbsp;</p>
+
+```{r, echo = F, comment = NA}
+cat(eigen(t(tpm))$vector[, 1])
+```
+<p>&nbsp;</p>
+
+```{r, echo = F, comment = NA}
+cat(t(tpm)%*%pi)
+```
+<p>&nbsp;</p>
+
+
+### 2.e - It is well approximated by the simulated empirical relative frequencies computed in b) and c)?
+The theoretical steady state for $\pi$ is similar to the points b and c that we calculated previously
+```{r, echo = F, comment = NA}
+cat(t(tpm)%*%pi)
+```
+<p>&nbsp;</p>
+
+### 2.f - What happens if we start at t = 0 from state X_0 = 2 instead of X_0 = 1?
+The ergodic properties of MC will ensure that there will be no difference starting from any state, so we don't take into account whether it starts at $t = 0$ from state $X_0 = 2$ instead of $X_0 = 1$.
