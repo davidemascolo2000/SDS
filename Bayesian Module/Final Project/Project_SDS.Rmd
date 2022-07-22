@@ -1,0 +1,2766 @@
+---
+title: "Bayesian tools for detecting breast cancer"
+subtitle: "Statistical Methods for Data Science and Laboratory II - Final Project"
+author: "Mascolo Davide - 2001991"
+date: "21/07/2022"
+output: html_document
+---
+
+```{r, echo = F, message = F}
+## Import Utils
+options(scipen = 999)
+set.seed(1234)
+
+library(ggplot2)
+library(kableExtra)
+library(factoextra)
+library(gridExtra)
+library(PerformanceAnalytics)
+library(plotly)
+library(tibble)
+library(caret)
+library(ggcorrplot)
+library(R2jags)
+library(bayesplot)
+library(dplyr)
+library(latex2exp)
+library(coda)
+library(pROC)
+```
+
+
+## Contents
+- <a href = "#prob_pres"> Problem Presentation </a>
+    + <a href = "#history"> Breast Cancer History </a>
+    + <a href = "#mission"> Why this topic? </a>
+- <a href = "#data"> Dataset </a>
+    + <a href = "#fe"> Features Extraction </a>
+    + <a href = "#fi"> Features Information </a>
+- <a href = "#eda"> Exploratory Data Analysis </a>
+    + <a href = "#correlation"> Correlation Analysis </a>
+    + <a href = "#pca"> Principal Component Analysis </a>
+- <a href = "#ba"> Bayesian Analysis </a>
+    + <a href = "#Rjags"> Implemanting RJags </a>
+    + <a href = "#frequentist"> Frequentist Approach </a>
+    + <a href = "#diagnostic"> Diagnostic </a>
+        + <a href = "#cm"> The Cumulative Means </a>
+        + <a href = "#ae"> The Approximation Error </a>
+        + <a href = "#pu"> Posterior Uncertainty </a>
+        + <a href = "#ec"> The Estimated Correlations </a>
+        + <a href = "#tc"> Testing of the Convergences </a>
+            + <a href = "#raf&lew"> Raftery & Lewis Test </a>
+            + <a href = "#gew"> Geweke Test </a>
+            + <a href = "#gel"> Gelman  & Rubin Test </a>
+            + <a href = "#heid"> Heidelberg and Welch Diagnostic </a>
+        + <a href = "#ci"> Credible Interval and Point Estimates </a>
+    + <a href = "#pred"> The predictions </a>
+    + <a href = "#second_model"> Second Model </a>
+        + <a href = "#diagnostic_two"> Diagnostic </a>
+        + <a href = "#pred_two"> The Predictions </a>
+    + <a href = "#simulated"> Recover model parameters with data simulated from the model </a>
+- <a href = "#fd"> Final Discussion </a>
+    + <a href = "#fw"> Future Work </a>
+- <a href = "#rf"> References </a>
+
+
+<p>&nbsp;</p>
+
+#### <a id = "prob_pres"> Problem Presentation </a>
+
+**Let's read the numbers in Italy:**
+
+Cancer numbers in Italy 2021 confirm that breast cancer is the most diagnosed neoplasm in women, in which about one in three malignancies (30%) is breast cancer.
+
+According to data from the report **Cancer numbers in Italy 2021** in Italy there are an estimated 55,000 new diagnoses of female breast cancer in 2020 and 12,500 deaths are estimated in 2021. The net survival 5 years after diagnosis is 88%.
+
+According to ISTAT data, in 2018 breast cancer represented, with 13,076 deaths, the leading cause of death from cancer in women.
+
+Since the end of the nineties there has been a continuous trend towards a decrease in mortality from breast cancer (-0.8% / year), attributable to a greater diffusion of early diagnosis programs and therefore to diagnostic anticipation and also to therapeutic progress.
+<p>&nbsp;</p>
+
+#### <a id = "history"> Breast Cancer History </a>
+Humans have known about breast cancer for a long time. For example, Edwin Smith's surgical papyrus describes cases of breast cancer. This medical text dates back to 3000-2500 BC.
+Hippocrates described the stages of breast cancer in the early 400 BC.
+In the first century, doctors experimented with surgical incisions to destroy tumors.
+
+Our modern approach to breast cancer treatment and research began to take shape in the 19th century. We consider these milestones:
+
+- **1882**: William Halsted performs the first radical
+mastectomy. This surgery will remain the standard operation for
+breast cancer treatment until the 20th century.
+
+- **1895**: The first X-ray is taken. Eventually, low-dose X-rays called mammograms will be used to detect breast cancer.
+
+- **1937**: In addition to surgery, radiotherapy is used to spare the breast. After removing the tumor, needles with radius are inserted into the breast and near the lymph nodes.
+
+- **2013**: The four major subtypes of breast cancer are defined as HR + / HER2 ("luminal A"), HR- / HER2 ("triple negative"), HR + / HER2 + ("luminal B") and HR- / HER2 + ("HER2-enriched ").
+
+- **2018**: A clinical study suggests post-surgery chemotherapy does not benefit 70% of women with early-stage breast cancer.
+
+Breast cancer treatment is becoming more personalized as doctors learn more about the disease. It is now seen as a disease with subtypes that have different patterns and ways of acting on the body. The ability to isolate specific genes and classify breast cancer is the start of more personalized treatment options. Special tests can also tell doctors more about breast cancer.
+
+#### <a id = "mission"> Why this topic? </a>
+<center><img src = "Im6.PNG" width = "300"></center>
+<p>&nbsp;</p>
+
+In today's world, especially among young university colleagues, having a method with a performance close to 99% has become a challenge and the only goal to be achieved.
+Obviously, putting an excellent model with good predictive skills into production is the goal of any data scientist, but too often we forget that data science is only the means and not the end.
+If we really want this science to accompany us in everyday life, we must begin to see it only as a tool with which to solve the problems that are placed before us and we must understand that the study and analysis of the latter is much more important of the technique used to solve them.
+
+For this reason I have chosen to bring a problem of the healthcare sector, which is the sector that can really make us understand how useful these techniques are to help us in daily life and above all make us understand that improving the forecasting capacity of a model in this case can it means saving a human life.
+
+*Data Science **is not** R. Data Science **is not** Python. Data Science **is not** SQL. Data Science **is not** Spark. Data Science **is not** TensorFlow.*
+
+*Data Science is using above tools and techniques, and if required inventing new tools and techniques, to solve a problem using "data" in a "scientific" way.*
+<p>&nbsp;</p>
+
+
+#### <a id = "data"> Dataset </a>
+The key challenge of this study is the classification of breast tumors as malignant (cancerous) or benign (non-cancerous) on [Breast Cancer Wisconsin (Diagnostic) Dataset](https://www.kaggle.com/datasets/yasserh/breast-cancer-dataset) which contains only quantitative features.
+These are the features we have available; **id** is the identification number of the patient, we drop it because it is not useful for the analysis and the target variable we are interested in predicting is **diagnosis** which refers to the state of the cancer.
+We treat the reference variable as a factor based on two levels, **1** if it assumes value **M** and **0** if it assumes value **B**.
+```{r, echo = F}
+## Load data
+dat <- read.csv("breast-cancer.csv", header = T)
+```
+
+```{r, echo = F, comment = NA}
+## Look at data
+glimpse(dat)
+
+## Data Wrangling
+dat$id <- NULL ## remove id variable
+dat$diagnosis <- factor(ifelse(dat$diagnosis == "M",
+                               1, 0),
+                        levels = c(0, 1)) ## 1 if the tumor is malignant, 0 benign.
+```
+<p>&nbsp;</p>
+
+#### <a id = "fe"> Features Extraction </a>
+
+The diagnosis of breast tumors has traditionally been performed by a fully biopsy, an invasive surgical procedure. *Fine needle aspirations* (FNAs) is a type of biopsy procedure which consists of inserting a thin needle into an area of abnormal-appearing tissue or body fluid. The aspirated material is then expressed onto a glass side and stained. The image for digital analysis is generated color video camera mounted atop an Olympus microscope and the image is projected into the camera. Then the image is captured.
+
+The first step in successfully analyzing the digital image is to specify an accurate location of each cell nucleus boundary. The actual boundary of the cell nucleus is located by an active contour model known in the literature as a **Snake**.
+This is a feature extraction technique which initially identifies the approximate Region Of Interest (ROI), by removing the non-tumor part, and then minimizes an energy function defined over the arclength of a closed curve. The energy function is defined in such a way that the minimum value occurs when the curve accurately corresponds to the boundary of a cell nucleus.
+
+Here, we can see a pratical example of lesion segmentation on a breast MRI (Magnetic Resonance Imaging) scan:
+
+<center><img src = "Im1.PNG" width = "300"></center>
+<center>Lesion segmentation on a breast MRI scan</center>
+<p>&nbsp;</p>
+
+- a) Locate a rectangle ROI box that contained a postcontrast breast MRI lesion.
+- b) Initial segmentation by the FCMs-based method.
+- c) deformation of GVF snake using FCMs-based contour for inizialization.
+- d) radiologists'manual delineation.
+
+In the computerized segmentation section, FCMs clustering based method is used to produce an initial segmentation of the input image, while the gradient vector flow (GVF) snake model is applied to the initial segmentation to obtain the final segmentation. The initial segmentation method is referred to as the FCMs-based and the final segmentation method is referred to as the GVF-FCMs for short. The segmentation performance of both methods is evaluated with manual segmentation by experienced radiologists on dynamic contrast-enhanced (DCE) MRI.
+
+This approach is very powerful with a very low average time cost and dynamic memory cost.
+
+A set of 569 images has been processed in the manner described above and we have a dataset with 569 number of observations.
+<p>&nbsp;</p>
+
+#### <a id = "fi"> Features Information </a>
+
+The computer vision diagnostic system extracts ten different features from the snake-generated cell nuclei boundaries. All of the features are numerically modeled such that larger values will typically indicate a higher likelihood of malignancy.
+
+The extracted features are as follows.
+
+- 1) **Diagnosis** (M = malignant, B = benign).
+
+- 2) **Radius**: the radius of an individual nucleus is measured by averaging the length of the radial line segments defined by the centroid of the snake and the individual snake points.
+
+- 3) **Texture**: the texture of the cell nucleus is measured by finding the variance of the grayscale intensities in the
+component pixels.
+
+- 4) **Perimeter**: the total distance between the snake points constitutes the nuclear perimeter.
+
+- 5) **Area**: nuclear area is measured by counting the number of pixels on the interior of the snake and adding one-half of the pixels in the perimeter.
+
+- 6) **Smoothness**: the smoothness of a nuclear contour is quantified by measuring the difference between the length of a radial line and the average length of the lines surrounding it.
+
+<center><img src = "Im2.PNG" width = "300"></center>
+<center>Radial Lines Used for Smoothness</center>
+<p>&nbsp;</p>
+
+- 7) **Compactness**: perimeter and area are combined to give a measure of the compactness of the cell nucleus using the formula $\frac{perimeter^2}{area}$.
+
+- 8) **Concavity**: in a further attempt to capture shape information we measure the number and severity of concavities or indentations in a cell nucleus. We draw chords between non-adjacent snake points and measure the extent to which the actual boundary of the nucleus lies on the inside of each chord.
+
+<center><img src = "Im3.PNG" width = "300"></center>
+<center>Chord Used to Compute Concavity</center>
+<p>&nbsp;</p>
+
+- 9) **Concave Points**: this feature is similar to Concavity
+but measures only the number, rather than the magnitude, of contour concavities.
+
+- 10) **Symmetry**: in order to measure symmetry, the major axis, or longest chord through the center, is found. We then measure the length difference between lines perpendicular to the major axis to the cell boundary in both directions.
+
+<center><img src = "Im4.PNG" width = "300"></center>
+<center>Segments Used in Symmetry Computation</center>
+<p>&nbsp;</p>
+
+- 11) **Fractal Dimension**: it is approximated using the *coastline approximation*. The perimeter of the nucleus is measured using increasingly larger 'rulers'. As the ruler size increases, decreasing the precision of the measurement, the observed perimeter decreases.
+
+<center><img src = "Im5.PNG" width = "600"></center>
+<center>Sequence of Measurements for Computing Fractal Dimension</center>
+<p>&nbsp;</p>
+
+As we can see above, the number of features increases because some statistical indices are calculated as, mean and standard deviation, on the 10 starting variables. The final dataset contains 32 features.
+<p>&nbsp;</p>
+
+
+#### <a id = "eda"> Exploratory Data Analysis </a>
+In the first phase of the exploratory analysis we want to calculate how many patients there are in each reference category. The dataset does not represent a typical medical analysis distribution in this case. Typically, we will have a considerable number of patients with a non-malignant tumor compared to a small number of patients with a malignant tumor.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 4, fig.width = 6}
+## Distribution of Cancer
+ggplot(dat, aes(x = diagnosis)) +
+  geom_bar(color = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Distribution of Cancer") +
+  xlab("Diagnosis") +
+  ylab("Frequency") +
+  theme_grey() +
+  stat_count(geom = "text", colour = "white", size = 3.5,
+aes(label = paste0(round(..count../sum(..count..),
+                         3)*100, "%")),
+position = position_stack(vjust = 0.5))
+```
+We can see how the percentage of malignant cancers in this dataset is higher than what would be expected in a classic example of binary classification in the medical field. Usually in these applications we speak of **Imbalanced Classification**, certainly in this case we do not have a situation of equilibrium between the two classes, but the percentage of **37%** for malignant cancers makes us conclude that we are facing a slight classification unbalanced.
+<p>&nbsp;</p>
+
+We analyze the features and try to understand which features have larger predictive value considering the degree of separation of the two classes, on each feature.
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 20, fig.width = 14}
+## Plot all variables
+scales <- list(x = list(relation = "free"),
+               y = list(relation = "free"), cex = 0.6)
+featurePlot(x = dat[ ,-1], y = dat$diagnosis,
+            plot = "density", scales = scales,
+            layout = c(3, 10),
+            auto.key = list(columns = 2), pch = "|")
+```
+We don't have a perfect separation with any feature, but there are different good features like **Concave Points Worst**, **Concavity Worst**, **Perimeter Worst**, **Radius Worst**, **Concavity Mean**, **Concave Points Mean**, **Area Mean**, **Perimeter Mean**.
+
+There are also features that have almost perfectly overlapping values for the two classes, such as **Symmetry Se **, **Smoothness Se**, **Symmetry Mean** and **Texture Se**.
+
+We let's look at these features with a scatterplot conditionally on the status of the cancer.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 10}
+## Scatter plot
+## Set colors
+color_plot <- c("blue", "red")
+
+## Symmetry Se
+p1 <- ggplot(dat, aes(x = 1:nrow(dat), y = symmetry_se,
+                      color = diagnosis)) +
+  geom_point() +
+  scale_color_manual(values = color_plot) +
+  xlab("") +
+  ylab("Value") +
+  ggtitle("Symmetry Se") +
+  theme_gray()
+
+## Smoothness Se
+p2 <- ggplot(dat, aes(x = 1:nrow(dat), y = smoothness_se,
+                      color = diagnosis)) +
+  geom_point() +
+  scale_color_manual(values = color_plot) +
+  xlab("") +
+  ylab("Value") +
+  ggtitle("Smoothness Se") +
+  theme_gray()
+
+## Symmetry Mean
+p3 <- ggplot(dat, aes(x = 1:nrow(dat), y = symmetry_mean,
+                      color = diagnosis)) +
+  geom_point() +
+  scale_color_manual(values = color_plot) +
+  xlab("") +
+  ylab("Value") +
+  ggtitle("Symmetry Mean") +
+  theme_gray()
+
+## Texture Se
+p4 <- ggplot(dat, aes(x = 1:nrow(dat), y = texture_se,
+                      color = diagnosis)) +
+  geom_point() +
+  scale_color_manual(values = color_plot) +
+  xlab("") +
+  ylab("Value") +
+  ggtitle("Texture Se") +
+  theme_gray()
+
+## Plot
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+As we can see, the separation is not clear for these features and this could mean that these variables do not have good predictive value.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+#### <a id = "correlation"> Pearson Correlation </a>
+At this step, we compute the **correlation** matrix.
+
+The correlation is measured considering the Pearson formula:
+$$
+\rho_{XY} = \frac{Cov(X,Y)}{\sigma_X \cdot \sigma_Y}
+$$
+Where:
+
+- $Cov(X,Y)$ is the covariance between the two sets of values X and Y.
+- $\sigma_X$ is the deviation standard of the set X.
+- $\sigma_Y$ is the deviation standard of the set Y.
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 10, fig.width = 10}
+## Correlation heatmap
+R     <- cor(dat[, -1])
+R_cor <- ggcorrplot(R, hc.order = TRUE, type = "upper")
+ggplotly(R_cor)
+```
+The highest correlations are between:
+
+- Perimeter Mean and Radius Worst.
+
+- Area Worst and Radius Worst.
+
+- Perimeter Worst and Radius Worst, Perimeter Mean, Area Worst, Area Mean, Radius Mean.
+
+- Texture Mean and Texture Worst.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+Now, we can see the plots for some of these highly correlated features.
+
+**Positive Correlated Features**
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 10, message = F}
+## Positive Correlated Features
+
+## Perimeter Mean Vs Radius Worst
+p5 <- ggplot(dat, aes(x = perimeter_mean,
+                      y = radius_worst,
+                      color = diagnosis)) +
+  #alpha = 5/10in geom_point
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Perimeter Mean") +
+  ylab("Radius Worst")
+
+## Area Mean Vs Radius Worst
+p6 <- ggplot(dat, aes(x = area_mean,
+                      y = radius_worst,
+                      color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Area Mean") +
+  ylab("Radius Worst")
+
+## Texture Mean Vs Texture Worst
+p7 <- ggplot(dat, aes(x = texture_mean,
+                      y = texture_worst,
+                      color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Texture Mean") +
+  ylab("Texture Worst")
+
+## Area Worst Vs Radius Worst
+p8 <- ggplot(dat, aes(x = area_worst,
+                      y = radius_worst,
+                      color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Area Worst") +
+  ylab("Radius Worst")
+
+## Plot
+grid.arrange(p5, p6, p7, p8, ncol = 2)
+```
+Some pairs of variables such as **Perimeter Mean - Radius Worst** and **Area Mean - Radius Worst** offer a good level of separation between the two classes. The same is not true for the other two pairs of variables.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+**Uncorrelated Features**
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 10}
+## Uncorrelated Features
+
+## Smoothness Mean Vs Texture Mean
+p9 <- ggplot(dat, aes(x = smoothness_mean,
+                      y = texture_mean,
+                      color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Smoothnees Mean") +
+  ylab("Texture Mean")
+
+## Radius Mean Vs Fractal Dimension Worst
+p10 <- ggplot(dat, aes(x = radius_mean,
+                       y = fractal_dimension_worst,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Radius Mean") +
+  ylab("Fractal Dimension Worst")
+
+## Texture Mean Vs Symmetry Mean
+p11 <- ggplot(dat, aes(x = texture_mean,
+                       y = symmetry_mean,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Texture Mean") +
+  ylab("Symmetry Mean")
+
+## Texture Mean Vs Symmetry Se
+p12 <- ggplot(dat, aes(x = texture_mean,
+                       y = symmetry_se,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Texture Mean") +
+  ylab("Symmetry Se")
+
+## Plot
+grid.arrange(p9, p10, p11, p12, ncol = 2)
+```
+In this case, we can see that there no kind of separation for the two classes.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+**Negative Correlated Features**
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 10}
+## Negative Correlated Features
+
+## Area Mean Vs Fractal Dimension Mean
+p13 <- ggplot(dat, aes(x = smoothness_mean,
+                       y = fractal_dimension_mean,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Area Mean") +
+  ylab("Fractal Dimension Mean")
+
+## Radius Mean Vs Fractal Dimension Mean
+p14 <- ggplot(dat, aes(x = radius_mean,
+                       y = fractal_dimension_mean,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Radius Mean") +
+  ylab("Fractal Dimension Mean")
+
+## Area Mean Vs Smoothness Se
+p15 <- ggplot(dat, aes(x = area_mean,
+                       y = smoothness_se,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Area Mean") +
+  ylab("Smoothness Se")
+
+## Smoothness Se Vs Perimeter Mean
+p16 <- ggplot(dat, aes(x = smoothness_se,
+                       y = perimeter_mean,
+                       color = diagnosis)) +
+  geom_point(alpha = 5/10) +
+  theme_grey() +
+  scale_color_manual(values = color_plot) +
+  xlab("Smoothness Se") +
+  ylab("Perimeter Mean")
+
+## Plot
+grid.arrange(p13, p14, p15, p16, ncol = 2)
+```
+Here we can see some negative correlations, but with not very high values.
+We observe that the pair of variables **Radius Mean - Fractal Dimension Mean** offers an acceptable level of separation between the two classes.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+
+#### <a id = "pca"> Principal Component Analysis </a>
+We have too many features and this is a problem for the visualization but also for the interpretability of the model.
+The principal component analysis (PCA) is the process of computing the principal components and using them to perform a change of basis on the data, using only the first few principal components which cumulate a chosen variance threshold. In this project we use this tool only for the visualization of the features, in particular we want to show the two groups of patients in the transformed space of the first two principal components.
+
+We have a vector $x_i \in \mathbb{R^p}$, and the goal is to find a way to map data such that:
+$$
+x_i \rightarrow z_i \in \mathbb{R^q}, \,\,\, with \,\,\,
+q < p
+$$
+making sure that:
+
+- some relevant informations about the distribution of $X$ are preserved.
+
+- it's possible to go back to the starting space $z_i \rightarrow x_i$.
+<p>&nbsp;</p>
+
+**Goal**:
+
+- transform the original variables $X = (X_1, X_2, ..., X_p)'$, into $Z = (Z_1, Z_2, ..., Z_p)'$.
+
+- the transformation is linear
+$$
+Z_j = \phi_{1j}X_1 + \phi_{2j}X_2 + ... + \phi_{pj}X_p
+$$
+it is called $j^{th}$ principal component. The coefficients:
+$$
+\phi_{j} = (\phi_{1j}, \phi_{2j}, ..., \phi_{pj})'
+$$
+they are called **loadings** of the $j^{th}$ principal component.
+
+The principal components are:
+
+- sorted by decreasing variance: $Var[Z_1] \ge Var[Z_2] \ge ... \ge Var[Z_p]$
+
+- uncorrelated: $Cov[Z_l, Z_m] = 0 \,\,\, \forall \,\,\, l \neq m$.
+
+We also want the $Z$ to preserve all the variance contained in $X$.
+<p>&nbsp;</p>
+
+Now, we want to analyze the behavior of the data transformed with the PCA in the new dimension. We are interested in understanding the relationship between the original variables and the principal components and choosing the appropriate number of components such as to accumulate a certain variance value.
+<p>&nbsp;</p>
+
+```{r, echo = F}
+## Visualization using PCA
+res_pca <- prcomp(dat[, -1], scale = T) ## compute PCA
+```
+
+The biplot is a visualization that allows to see the original units in the space of the principal components and overlap the directions of the original $X$ variables in the space of the new features $Z$.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 12}
+## Biplot
+fviz_pca_biplot(res_pca, col.ind = dat$diagnosis,
+                       col = "black", palette = "jco",
+                       geom = "point", repel=TRUE,
+                       legend.title = "Diagnosis",
+                       addEllipses = TRUE)
+```
+
+Looking at the information on the variability that each represents
+component, we can say that the first component represents $44.3\, \%$ of the variability, while the second component $19 \, \%$.
+Vectors show us in which direction the original variables move in the $Z$ domain. When $Z_1$ and $Z_2$ decrease, we are in a situation where malignant cancer diagnoses increase.
+
+In particular, we can identify two groups of variables:
+
+- the first is located in the upper left and is strongly correlated negatively with the first component and positively with the second component.
+
+- the second group of variables is negatively correlated with both the first and the second component.
+
+This makes us think that within the same class of malignant tumors, there may be factors *(latent concepts)* that distinguish two cells even if both are carriers of the disease.
+<p>&nbsp;</p>
+
+In order to choose the number of principal components, we can look at the scree plot, which represents the amount of variability explained by each principal component with respect to the total variability contained in the data.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Scree plot
+fviz_eig(res_pca, addlabels = T, ylim = c(0, 50))
+```
+We recover $79.3 \%$ of variance in the entire dataset using four principal components, so this is a good preservation of the result.
+<p>&nbsp;</p>
+
+Now, we want to analyze the contribution of the original variables with respect to the first four components.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 9}
+## Contribution of variables of Dimensions
+
+## First component
+fe1 <- fviz_contrib(res_pca, choice = "var", axes = 1,
+                    fill = rgb(0.1, 0.4, 0.5, 0.7),
+                    color = "blue", top = 10,
+                    sort.val ="asc") + coord_flip() + xlab("")
+
+## Second component
+fe2 <- fviz_contrib(res_pca, choice = "var", axes = 2,
+                    fill = rgb(0.1, 0.4, 0.5, 0.7),
+                    color = "blue", top = 10,
+                    sort.val ="asc") + coord_flip() + xlab("")
+
+## Third Component
+fe3 <- fviz_contrib(res_pca, choice = "var", axes = 3,
+                    fill = rgb(0.1, 0.4, 0.5, 0.7),
+                    color = "blue", top = 10,
+                    sort.val ="asc") + coord_flip() + xlab("")
+
+## Fourth Component
+fe4 <- fviz_contrib(res_pca, choice = "var", axes = 4,
+                    fill = rgb(0.1, 0.4, 0.5, 0.7),
+                    color = "blue", top = 10,
+                    sort.val ="asc") + coord_flip() + xlab("")
+
+## Plot
+grid.arrange(fe1, fe2, fe3, fe4, ncol = 2)
+```
+As we can see, the variables that explain most of the information along the first principal component are **Concave Points Mean**, **Concavity Mean**, **Concave Point Worst**, **Compactness Mean** and so on. This information is consistent with what was said previously for the biplot, as the variables that are most correlated to the principal component we are examining are also those that have a greater contribution, i.e. those with a longer direction vector.
+
+The same conclusions can be made for the contributions of the variables to the other components.
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+#### <a id = "ba"> Bayesian analysis </a>
+The main goal is to do a full Bayesian analysis, based on understanding whether a cancer is cancerous or non-cancerous. To evaluate the predictive capacity of the model, it was decided to split the dataset into training (80%) and test (20%). The createDataPartition command of the caret package was used to maintain the same balance of the reference classes, both for training and for test set.
+
+From the correlation analysis, we noticed that there are many highly correlated features between them that can lead us to the problem of multicollinearity, that is, when in the specified model the predictors are correlated with each other. To solve this problem, we consider all pairs of variables and drop the features with correlation value $\rho_{XY} \ge 0.7$. To do this we used the findCorrelation function of the caret package.
+
+As we can see, at the end of this procedure, we pass from 30 predictors to 10 predictors:
+```{r, echo = F, comment = NA, message = F}
+## Remove the variables that have correlation
+## coefficients > 0.7
+
+## Variable reduction
+## Get all the numeric variables
+dat_numeric <- dat[sapply(dat, is.numeric)]
+
+## Apply cor function
+cor_matrix <- cor(dat_numeric)
+
+## Get all the correlated variables where correlation coefficient >= 0.7
+highly_corr     <- findCorrelation(cor_matrix,
+                                   cutoff = 0.7)
+highly_corr_col <- colnames(dat_numeric[highly_corr])
+
+## Remove the correlated variables
+dat_new <- dat[, -which(colnames(dat) %in%
+                          highly_corr_col)]
+
+## Check
+glimpse(dat_new)
+```
+<p>&nbsp;</p>
+
+In this problem, the target variable **diagnosis** can be modeled as a Bernoulli distribution:
+$$
+Y_i \in 0,1 \, where \, \, 1 \, \, is \, \, malignant\, \,  (cancerous) \, \, and \, \, 0\, \,  is\, \,  benign\, \,  (non \,\, cancerous)
+$$
+We consider the following Logistic Regression model with the logit as link function, which is the matematical expression that connects the value of the linear predictors with the response $Y$.
+$$
+Y_i \sim Bernoulli(p_i)
+$$
+$$
+logit(p_i) = log\Big(\frac{p_i}{1-p_i}\Big) = \beta_1 \ Texture \ Mean \ + \beta_2 \ Area\ Mean \ + \beta_3 \ Symmetry\ Mean \ + \beta_4 \ Texture \ Se  + \beta_5 \ \ Smoothness\  Se + \\ + \beta_6 \ Symmetry \ Se + \beta_7 \ Fractal \ Dimension \ Se + \beta_8 \ Smoothness \ Worst + \beta_9 \ Symmetry \ Worst + \beta_{10} \ Fractal \ Dimension \ Worst
+$$
+<p>&nbsp;</p>
+
+One of the assumptions of logistic regression is that the features are independent of each other.
+
+Model coefficients $\beta_i$ are typically defined as Normal because they can take values between all real numbers.
+$$
+\beta_i \sim N\Big(\mu = 0, \sigma^2 = \frac{1}{10^6}\Big)
+$$
+*For the specification of the model, we don't consider the intercept*
+<p>&nbsp;</p>
+
+```{r, echo = F}
+## Train & Test
+trainIndex <- createDataPartition(dat_new$diagnosis,
+                                  p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+dat_train  <- dat_new[ trainIndex,]
+dat_test   <- dat_new[-trainIndex,]
+N          <- nrow(dat_train)
+```
+
+```{r, echo = F}
+## Features
+y   <- ifelse(as.numeric(dat_train$diagnosis) == 2, 1,0) 
+x1  <- as.numeric(dat_train$texture_mean)
+x2  <- as.numeric(dat_train$area_mean)
+x3  <- as.numeric(dat_train$symmetry_mean)
+x4  <- as.numeric(dat_train$texture_se)
+x5  <- as.numeric(dat_train$smoothness_se)
+x6  <- as.numeric(dat_train$symmetry_se)
+x7  <- as.numeric(dat_train$fractal_dimension_se)
+x8  <- as.numeric(dat_train$smoothness_worst)
+x9  <- as.numeric(dat_train$symmetry_worst)
+x10 <- as.numeric(dat_train$fractal_dimension_worst)
+```
+
+As we can see from the following plot, the balance of the response variable is respected after the division into train set and test set, to avoid introducing bias.
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 4, fig.width = 8}
+## Distribution of Cancer
+
+## Train Set
+ptrain <- ggplot(dat_train, aes(x = diagnosis)) +
+  geom_bar(color = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Distribution of Cancer (Train Set)") +
+  xlab("Diagnosis") +
+  ylab("Frequency") +
+  theme_grey() +
+  stat_count(geom = "text", colour = "white",
+             size = 3.5,
+          aes(label = paste0(round(..count../sum(..count..),
+                                   3)*100, "%")),
+          position = position_stack(vjust = 0.5))
+
+## Test Set
+ptest <- ggplot(dat_test, aes(x = diagnosis)) +
+  geom_bar(color = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle("Distribution of Cancer (Test Set)") +
+  xlab("Diagnosis") +
+  ylab("Frequency") +
+  theme_grey() +
+  stat_count(geom = "text", colour = "white", size = 3.5,
+aes(label = paste0(round(..count../sum(..count..),
+                         3)*100, "%")),
+position = position_stack(vjust = 0.5))
+
+## Plot
+grid.arrange(ptrain, ptest, ncol = 2)
+```
+<p>&nbsp;</p>
+
+#### <a id = "Rjags"> Implementing RJags </a>
+We have implemented the model using Rjags, as follow:
+```{r, message = F, warning = FALSE}
+## Model 1 (Complete)
+model <- function(){
+  # Likelihood
+  for (i in 1:N){
+    y[i] ~ dbern(p[i])
+    logit(p[i]) <-  beta1*x1[i] + beta2*x2[i] +
+      beta3*x3[i] + beta4*x4[i] + beta5*x5[i] +
+      beta6*x6[i] + beta7*x7[i] + beta8*x8[i] +
+      beta9*x9[i] + beta10*x10[i]}
+  
+  ## Defining the prior beta parameters
+  beta1  ~ dnorm(0, 1.0E-6)
+  beta2  ~ dnorm(0, 1.0E-6)
+  beta3  ~ dnorm(0, 1.0E-6)
+  beta4  ~ dnorm(0, 1.0E-6)
+  beta5  ~ dnorm(0, 1.0E-6)
+  beta6  ~ dnorm(0, 1.0E-6)
+  beta7  ~ dnorm(0, 1.0E-6)
+  beta8  ~ dnorm(0, 1.0E-6)
+  beta9  ~ dnorm(0, 1.0E-6)
+  beta10 ~ dnorm(0, 1.0E-6)
+}
+```
+
+```{r, message = F, warning = F}
+## Passing the data for RJags
+data.jags <- list("y" = y, "N" = N, "x1" = x1, "x2" = x2,
+                  "x3" = x3, "x4" = x4, "x5" = x5,
+                  "x6" = x6, "x7" = x7, "x8" = x8,
+                  "x9" = x9, "x10" = x10)
+
+## Defining parameters of interest to show after running RJags
+mod.params <- c("beta1", "beta2", "beta3", "beta4",
+                "beta5", "beta6", "beta7", "beta8",
+                "beta9", "beta10")
+```
+
+```{r, message = F, warning = F}
+## Bayesian Approach
+## Run JAGS
+
+## Model 1
+mod_jags <- jags(data = data.jags,
+                 n.iter = 10000,
+                 model.file = model,      
+                 n.chains = 3, 
+                 parameters.to.save = mod.params,
+                 n.burnin = 1000, n.thin = 10) 
+```
+
+Running Jags with 3 chains, 10000 iterations, a burn-in of 1000 steps and a thinning of 10 we have:
+<p>&nbsp;</p>
+
+##### Summary table of $\beta$ coefficients
+```{r, echo = F}
+## Check
+kable(mod_jags$BUGSoutput$summary, digits = 4) %>% 
+  kable_styling()
+```
+*DIC of the model  `r mod_jags$BUGSoutput$DIC`.*
+<p>&nbsp;</p>
+
+We know that $\beta_j$ measures the marginal impact of the covariate $X_j$ on the log-odds in favor of $Y = 1$.
+So $(e^{\beta_j} - 1) \times 100$ measures the percentage change rate of the odds in favor of $Y = 1$ when the predictor $X_j$ varies by one unit.
+<p>&nbsp;</p>
+
+We have other interesting results:
+
+- **Mean**: point estimate for $\beta_j$.
+
+- **Sd**: standard deviation for $\beta_j$.
+
+- **Rhat**: is the potential scale reduction and it is a measure of the convergence of the chain; it is a comparison between chains variance and within chains variance; if they are similar they become from the same distribution. In our case the value of Rhat is always equal to 1.
+
+- **n.eff**: is the effective sample size that can be considered as the number of independent Monte Carlo samples necessary to same precision of the MCMC samples. Greater this value, lower the autocorrelation between the MCMC steps and better is the final approximation, because we have decreased the number of correlated samples during each iteration and we have independent samples.
+
+- **DIC**: is the Deviance Information Criteria, a generalization of the AIC and a measure of goodness-fit. Lower values are better. These criteria do not have an absolute scale and should be used only to rank models.
+
+- **deviance**: is the measure of the goodness of fit of the model at the different steps of the chain. We want it to be pretty stationary to be able to use it for DIC and therefore to understand if a model is good or not.
+<p>&nbsp;</p>
+
+We can also compute credible intervals for the parameters.
+```{r, echo = F}
+## Credible Interval
+chain_matrix <- subset(mod_jags$BUGSoutput$sims.matrix,
+                       select = -deviance)
+cred      <- 0.95
+p.ET.jags <- apply(chain_matrix, 2, quantile,
+                   prob = c((1-cred)/2, 1-(1-cred)/2))
+p.HPD.jags <- HPDinterval(as.mcmc(chain_matrix))
+```
+
+Equi-tail intervals:
+
+```{r, echo = FALSE}
+## Check
+## Log-odds
+t(p.ET.jags) %>%
+  kable(caption = "log odds") %>%
+  kable_styling()
+```
+
+HPD intervals:
+
+```{r, echo = FALSE}
+## Check
+## Log-odds
+p.HPD.jags %>%
+  kable(caption = "log odds") %>%
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+##### <a id = "frequentist"> Frequentist Approach </a>
+##### Summary table of $\beta$ coefficients
+```{r, echo = F, warning = F}
+## Frequentist Approach
+glm_fit <- glm(y ~ x1+x2+x3+x4+x5+x6+x7+x8+x9+x10-1,
+               family = binomial(link ="logit"),
+               data = dat_train)
+
+## Check
+kable(summary(glm_fit)$coefficients, digits = 4) %>% 
+  kable_styling()
+```
+With frequentist approach AIC = `r AIC(glm_fit)`. As we can see from this summary, the estimade coefficients obtained by the frequentist approach are very similar to the ones obtained with jags. Also the AIC is similar.
+Maybe there are different features that are not so informative, thus looking at the confidence intervals, at the model diagnostics and after several attempts with different set of features, we can exclude different variables and re-estimate a new reduced model to compare with the full one.
+<p>&nbsp;</p>
+
+##### Bayesian Logistic Regression with features selection
+We try to eliminate some features and see what happens. The model is defined using Rjags, as follow:
+```{r, message = F, warning = F}
+## Model 2 (Reduced)
+model2 <- function(){
+  # Likelihood
+  for (i in 1:N){
+    y[i] ~ dbern(p[i])
+    logit(p[i]) <- beta1*x1[i] + beta2*x2[i] +
+      beta3*x3[i] + beta6*x6[i] + beta7*x7[i] +
+      beta9*x9[i]}
+  
+  ## Defining the prior beta parameters
+  beta1  ~ dnorm(0, 1.0E-6)
+  beta2  ~ dnorm(0, 1.0E-6)
+  beta3  ~ dnorm(0, 1.0E-6)
+  beta6  ~ dnorm(0, 1.0E-6)
+  beta7  ~ dnorm(0, 1.0E-6)
+  beta9  ~ dnorm(0, 1.0E-6)
+}
+```
+
+```{r, message = F, warning = F}
+## Passing the data for RJags
+data.jags2 <- list("y" = y, "N" = N, "x1" = x1,
+                   "x2" = x2, "x3" = x3,
+                   "x6" = x6, "x7" = x7, "x9" = x9)
+
+## Defining parameters of interest to show after running RJags
+mod.params2 <- c("beta1", "beta2", "beta3",
+                 "beta6", "beta7", "beta9")
+```
+
+```{r, message = F, warning = F}
+## Bayesian Approach
+## Run JAGS
+
+## Model 2
+mod_jags2 <- jags(data = data.jags2,
+                 n.iter = 10000,
+                 model.file = model2,      
+                 n.chains = 3, 
+                 parameters.to.save = mod.params2,
+                 n.burnin = 1000, n.thin = 10) 
+```
+
+Running Jags with 3 chains, 10000 iterations, a burn-in of 1000 steps and a thinning of 10 we have:
+<p>&nbsp;</p>
+
+##### Summary table of $\beta$ coefficients
+```{r, echo = F}
+## Check
+kable(mod_jags2$BUGSoutput$summary, digits = 4) %>% 
+  kable_styling()
+```
+We observe that removing them the DIC reduces to *`r mod_jags2$BUGSoutput$DIC`.*
+<p>&nbsp;</p>
+
+#### Summary table of $\beta$ coefficients
+```{r, echo = F, warning = F}
+## Frequentist Approach (Reduced)
+glm_fit2 <- glm(y ~ x1+x2+x3+x6+x7+x9-1,
+               family = binomial(link ="logit"),
+               data = dat_train)
+
+## Check
+kable(summary(glm_fit2)$coefficients, digits = 4) %>% 
+  kable_styling()
+```
+With frequentist approach and features selection, the AIC values is: `r AIC(glm_fit2)`.
+<p>&nbsp;</p>
+
+#### <a id = "diagnostic"> Diagnostic </a>
+At this point, we consider the reduced model like the best one and we go on.
+For the diagnostic part, we can see the plots of the Markov Chain, the density distribution of the values along the chain and the autocorrelations of each parameter.
+
+Looking at the trace plot, it is possible to observe the trend of the parameter with respect to the iteration of one or more Markov chains. We would like to observe a stationary time series, which would mean that the trend of the parameter, on average, is almost constant in the long run (flat).
+
+We can see that the Markov chain remains in the steady state and also the autocorrelation between consecutive values of the chain is very small. The autocorrelations drops around zero after few lags, meaning that there is not autocorrelation among different values in the chain. This happens for all the parameters but for $\beta_1$ and $\beta_2$ the autocorrelation decreases more slowly.
+
+```{r, echo = F}
+## Get chains
+chainArray <- mod_jags2$BUGSoutput$sims.array
+mcmc_mod   <- as.mcmc(mod_jags2)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 1 Plot
+beta_1_df <- data.frame(beta_1 = chainArray[,1,"beta1"],
+                        index = 1:900)
+## Trace Plot
+p17 <-ggplot(data = beta_1_df,aes(index, beta_1)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[1])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[1]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p18 <-ggplot(beta_1_df, aes(beta_1)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[1]))+
+  ggtitle(expression(paste("Density plot of ", beta[1])))
+
+## Autocorrelation
+b1_acf    <- acf(chainArray[,1,"beta2"], plot = FALSE)
+b1_acf_df <- with(b1_acf, data.frame(lag, acf))
+p19 <- ggplot(data = b1_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[1])))
+
+## Check
+grid.arrange(p17, p18, p19, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 2 Plot
+beta_2_df <- data.frame(beta_2 = chainArray[,1,"beta2"],
+                        index = 1:900)
+## Trace Plot
+p20 <-ggplot(data = beta_2_df,aes(index, beta_2)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[2])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[2]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p21 <-ggplot(beta_2_df, aes(beta_2)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[2]))+
+  ggtitle(expression(paste("Density plot of ", beta[2])))
+
+## Autocorrelation
+b2_acf    <- acf(chainArray[,1,"beta2"], plot = FALSE)
+b2_acf_df <- with(b2_acf, data.frame(lag, acf))
+p22 <- ggplot(data = b2_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[2])))
+
+## Check
+grid.arrange(p20, p21, p22, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 3 Plot
+beta_3_df <- data.frame(beta_3 = chainArray[,1,"beta3"],
+                        index = 1:900)
+## Trace Plot
+p23 <-ggplot(data = beta_3_df,aes(index, beta_3)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[3])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[3]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p24 <-ggplot(beta_3_df, aes(beta_3)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[3]))+
+  ggtitle(expression(paste("Density plot of ", beta[3])))
+
+## Autocorrelation
+b3_acf    <- acf(chainArray[,1,"beta3"], plot = FALSE)
+b3_acf_df <- with(b3_acf, data.frame(lag, acf))
+p25 <- ggplot(data = b3_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[3])))
+
+## Check
+grid.arrange(p23, p24, p25, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 6 Plot
+beta_6_df <- data.frame(beta_6 = chainArray[,1,"beta6"],
+                        index = 1:900)
+## Trace Plot
+p26 <-ggplot(data = beta_6_df,aes(index, beta_6)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[6])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[6]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p27 <-ggplot(beta_6_df, aes(beta_6)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[6]))+
+  ggtitle(expression(paste("Density plot of ", beta[6])))
+
+## Autocorrelation
+b6_acf    <- acf(chainArray[,1,"beta6"], plot = FALSE)
+b6_acf_df <- with(b6_acf, data.frame(lag, acf))
+p28 <- ggplot(data = b6_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[6])))
+
+## Check
+grid.arrange(p26, p27, p28, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 7 Plot
+beta_7_df <- data.frame(beta_7 = chainArray[,1,"beta7"],
+                        index = 1:900)
+## Trace Plot
+p29 <-ggplot(data = beta_7_df,aes(index, beta_7)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[7])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[7]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p30 <-ggplot(beta_7_df, aes(beta_7)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[7]))+
+  ggtitle(expression(paste("Density plot of ", beta[7])))
+
+## Autocorrelation
+b7_acf    <- acf(chainArray[,1,"beta7"], plot = FALSE)
+b7_acf_df <- with(b7_acf, data.frame(lag, acf))
+p31 <- ggplot(data = b7_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[7])))
+
+## Check
+grid.arrange(p29, p30, p31, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 9 Plot
+beta_9_df <- data.frame(beta_9 = chainArray[,1,"beta9"],
+                        index = 1:900)
+## Trace Plot
+p32 <-ggplot(data = beta_9_df,aes(index, beta_9)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[9])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[9]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p33 <-ggplot(beta_9_df, aes(beta_9)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[9]))+
+  ggtitle(expression(paste("Density plot of ", beta[9])))
+
+## Autocorrelation
+b9_acf    <- acf(chainArray[,1,"beta9"], plot = FALSE)
+b9_acf_df <- with(b9_acf, data.frame(lag, acf))
+p34 <- ggplot(data = b9_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[9])))
+
+## Check
+grid.arrange(p32, p33, p34, ncol = 3)
+```
+<p>&nbsp;</p>
+
+#### <a id = "cm"> The Cumulative Means </a>
+Here, we want to compute the empirical average of $\mathbf{\hat{I}}_{t}$ increasing the value of $t \, = \, 1,...,T$, with the following formula of $\mathbf{\hat{I}}_{t}$:
+
+$$
+\mathbf{I} \approx \mathbf{\hat{I}}_{t} = \frac{1}{T} \sum_{i=1}^{T} h(\theta^{(i)})
+$$
+
+```{r, echo = F, fig.width = 12, fig.height = 12, fig.align = "center"}
+## Empirical Means Plot
+df  <- as.data.frame(mod_jags2$BUGSoutput$sims.array)
+
+## Beta 1
+p35 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,1]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,2])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,3])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empitical Mean of $\\Beta_{1}$"),
+    caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey() 
+
+## Beta 2
+p36 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,4]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,5])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,6])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empirical Mean of $\\Beta_{2}$"),
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Beta 3
+p37 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,7]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,8])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,9])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empirical Mean of $\\Beta_{3}$"),
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Beta 6
+p38 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,10]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,11])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,12])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empirical Mean of $\\Beta_{6}$"),
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Beta 7
+p39 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,13]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,14])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,15])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empirical Mean of $\\Beta_{7}$"),
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Beta 9
+p40 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,16]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,17])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,18])),
+            col = "green", lwd = 1.2) +
+  labs(title = TeX("The Empirical Mean of $\\Beta_{9}$"),
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Deviance
+p41 <- ggplot(df, aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,19]))) +
+  geom_line(col = "red", lwd = 1.2) + 
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,20])),
+            col = "blue", lwd = 1.2) +
+  geom_line(mapping = aes(x = seq(1:nrow(df)),
+                      y = cummean(df[,21])),
+            col = "green", lwd = 1.2) +
+  labs(title = "The Empirical Mean of Deviance",
+       caption = "FC - Red; SC - Blue; TC - Green") + 
+  xlab("Iteration") + ylab("Cumulative Mean") +
+  theme_grey()
+
+## Plot
+grid.arrange(p35, p36, p37, p38, p39, p40, p41,
+             ncol = 2)
+```
+
+Each parameter achieves in all of the three chains generated the same end point, so means that with different initial points in these three chains, we are going to have the same estimated mean parameter.
+<p>&nbsp;</p>
+
+#### <a id = "ae"> The Approximation Error </a>
+Now, we consider the approximation error for the MCMC sampling. We compute the square root of the MCSE.
+
+The variance formula is:
+$$
+\mathbf{V}[\hat{I}_{t}] = \frac{Var_{\pi}[h(X_{1})]}{t_{eff}} = \Big( 1 + 2 \sum_{k=1}^{\infty} \rho_{k}\Big)\frac{\sigma^{2}}{T}
+$$
+The model we specified earlier has these effective samples size for each parameters:
+```{r, echo = F}
+## Check
+kable(mod_jags2$BUGSoutput$summary[,"n.eff"],
+      col.names = "n.eff") %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+Then we want to consider the MCSE that is the square root of the formula written above, so the results are:
+```{r, echo = F, message = NA}
+## Compute
+n <- length(colnames(mod_jags2$BUGSoutput$sims.matrix))
+mcse_df <- data.frame(MCSE = rep(NA, n))
+
+rownames(mcse_df) <-
+  colnames(mod_jags2$BUGSoutput$sims.matrix)[1:n] 
+
+## Cycle
+for(colname in colnames(mod_jags2$BUGSoutput$sims.matrix)[1:n]){
+  mcse_df[colname,"MCSE"]<-
+    LaplacesDemon::MCSE(mod_jags2$BUGSoutput$sims.matrix[,colname])
+}
+
+## Check
+kable(mcse_df, col.names = "MCSE") %>% 
+  kable_styling()
+```
+As we can see the $\beta_7$ has the highest approximation error considering the jointly chains.
+<p>&nbsp;</p>
+
+#### <a id = "pu"> Posterior Uncertainty </a>
+```{r, echo = F}
+## Extract mean and sd
+post_un <- as.data.frame(mod_jags2$BUGSoutput$summary[,c("mean","sd")])
+
+## Adding Estimation of uncertainty
+post_un$variability <- apply(post_un, 1, function(x){
+  return(x["sd"]/abs(x["mean"]))
+})
+
+## Check
+kable(post_un,
+      col.names = c("Mean", "Sd", "Uncertainty")) %>% 
+        kable_styling()
+```
+The highest posterior uncertainty is about the $\beta_1$.
+<p>&nbsp;</p>
+
+#### <a id = "ec"> The Estimated Correlations </a>
+In this step, we want to compute the correlations between all the values calculated during the MCMC sampling, looking at this matrix:
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 8, fig.width = 8}
+## Correlation heatmap
+R2     <- round(cor(mod_jags2$BUGSoutput$sims.matrix),
+               digits = 2)
+R_cor2 <- ggcorrplot(R2, hc.order = TRUE, type = "upper",
+                    lab = T)
+## Check
+R_cor2
+```
+The highest and positive correlation is between $\beta_2$ and $\beta_9$ and the highest negative correlation is between $\beta_9$ and $\beta_3$ .
+<p>&nbsp;</p>
+
+#### <a id = "tc"> Testing of the Convergences </a>
+We want to understand if we achieve with these multiple simulations of the markov chains, the convergences and the validity of the stationarity regions.
+
+#### <a id = "raf&lew"> Raftery & Lewis Test </a>
+Raftery and Lewis introduced an MCMC diagnostic that estimates the number of iterations needed for a given level of precision in posterior samples:
+```{r, echo = F, comment = NA}
+## Check
+raftery.diag(mcmc_mod)
+```
+We need 3746 samples to achieve these performances in these different chains.
+
+<p>&nbsp;</p>
+#### <a id = "gew"> Geweke Test </a>
+The **Geweke diagnostics ** is based on a test for equality of the means of the first and last part of a Markov chain (by default the first 10% and the last 50%) using a mean difference test to see if the two parts of the chain come from the same distribution (null hypothesis). If the two averages are equal it is likely that the chain will converge. 
+
+The test statistic is a standard Z-score: the difference between the two sample means divided by its estimated standard error adjusted for autocorrelation.
+```{r, echo = F}
+## Test
+gew_diag    <- geweke.diag(mcmc_mod)
+gew_diag_df <- cbind(gew_diag[[1]]$z,
+                     gew_diag[[2]]$z,
+                     gew_diag[[3]]$z)
+colnames(gew_diag_df) <- c("Z-score chain 1",
+                           "Z-score chain 2",
+                           "Z-score chain 3")
+## Check
+kable(gew_diag_df) %>%
+  kable_styling()
+```
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 10, fig.width = 10}
+## Plot
+geweke.plot(mcmc_mod[[1]])
+```
+As we can see, the majority of the values are inside the acceptance area so we almost always accept the equality of the means.
+<p>&nbsp;</p>
+
+#### <a id = "gel"> Gelman & Rubin Test </a>
+We know that trace plots provide an informal diagnostic about the convergence of the chains, we can use also another diagnostic called *Gelman & Rubin* diagnositc. This diagnostic calculates the variability within the chains and compares that to the variability between the chains.
+
+The Potential Scale Factor is the statistics that tells about the chain convergence. The closer it is to 1 the better the convergence is. Values faraway from 1 indicate that the chains haven't reached yet convergence.
+```{r, echo = F}
+## Check
+gelman_diag <- gelman.diag(mcmc_mod)
+kable(gelman_diag$psrf) %>% 
+  kable_styling()
+```
+All the values are near 1 which indicates that all 10000 iterations are enough for convergence to the stationary distribution.
+
+```{r, echo = F, fig.dim = c(10, 8)}
+## Plot
+gelman.plot(mcmc_mod)
+```
+<p>&nbsp;</p>
+
+#### <a id = "heid"> Heidelberg and Welch Diagnostic </a>
+The Heidelberg and Welch diagnostic calculates a statistic test to accept or reject the null hypothesis that the Markov chain is from a stationary distribution.
+
+The diagnostic consists of two parts:
+
+- it checks if the chain is stationary or not.
+- it checks the convergence of the stationarity chain in order to check if these estimates are accurate.
+```{r, echo = F}
+## Test
+heidel_diag <- heidel.diag(mcmc_mod)
+
+## Merge
+heidel_diag_df <- cbind.data.frame(heidel_diag[[1]][,1],
+                                   heidel_diag[[1]][,2],
+                                   heidel_diag[[1]][,3],
+                                   heidel_diag[[1]][,4],
+                                   heidel_diag[[1]][,5],
+                                   heidel_diag[[1]][,6])
+colnames(heidel_diag_df) <- c("Stationarity test",
+                       "Start iteration", "P-value",
+                       "Halfwidth test", "Mean", "Halfwidth")
+## Conversion
+heidel_diag_df$`Stationarity test` <-
+  ifelse(heidel_diag_df$`Stationarity test` == 1,
+         "passed", "failed")
+heidel_diag_df$`Halfwidth test` <-
+  ifelse(heidel_diag_df$`Halfwidth test` == 1,
+       "passed", "failed")
+
+## Check
+kable(heidel_diag_df, digit = 4) %>% 
+  kable_styling()
+```
+
+All tests are **passed** so we can say that the Markov chain reaches the stationary distribution and that the accuracy of our estimations good (intervals small enough). 
+<p>&nbsp;</p>
+
+#### <a id = "ci"> Credible Interval and Point Estimates</a>
+At this point, after checking that the simulations pass the convergence, we decide to compute credible intervals and the point estimates for our beta values estimated.
+```{r, echo = F}
+## Extract Matrix
+chainMat <- mod_jags2$BUGSoutput$sims.matrix
+
+## Point estimates
+beta_hat_jags <- colMeans(chainMat)
+ 
+## Credible Interval
+chain_matrix <- subset(mod_jags2$BUGSoutput$sims.matrix,
+                       select = -deviance)
+cred      <- 0.95
+p.ET.jags <- apply(chain_matrix, 2, quantile,
+                   prob = c((1-cred)/2, 1-(1-cred)/2))
+## HDP
+p.HPD.jags <- HPDinterval(as.mcmc(chain_matrix))
+```
+
+Point Estimates:
+
+```{r, echo = F}
+## Point Estimates
+kable(beta_hat_jags, col.names = "Point Estimates") %>% 
+  kable_styling()
+```
+
+
+Equi-tail intervals:
+
+```{r, echo = FALSE}
+## Check
+## Log-odds
+t(p.ET.jags) %>%
+  kable(caption = "log odds") %>%
+  kable_styling()
+```
+
+HPD intervals:
+
+```{r, echo = FALSE}
+## Check
+## Log-odds
+p.HPD.jags %>%
+  kable(caption = "log odds") %>%
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+##### Model comparison
+Let's compare the models using the DIC (Deviance Information Criterion), that is defined as follow:
+
+$DIC = D(\hat\theta) - 2 \, p_D$ where: $D(\hat\theta) = -2 \, log\,  f(y|\theta)$ is the deviance of the model and $p_D$ is the number of effective ("unconstrained") parameters in the model.
+
+```{r, echo = F}
+## Bayesian Approach
+kable(rbind("Model 1 (complete)" = mod_jags$BUGSoutput$DIC,
+            "Model 2 (reduced)" = mod_jags2$BUGSoutput$DIC),
+      col.names = "DIC", caption = "Bayesian Approach") %>% 
+  kable_styling()
+```
+The model with the best Deviance Information Criteria is the second one.
+<p>&nbsp;</p>
+
+#### <a id = "pred"> The Predictions </a>
+
+Here, we can observe the predictions with the second model using bayesian approach and see the performance on the unseen data using the confusion matrix, that is a tool for summarizing the performance of a classification method.
+Starting from this point, we can define different mertics that will be useful later on.
+
+<center><img src = "Test_Classifications.PNG" width = "500"></center>
+
+It's important to define the *False Positive* and *False Negative* that are the two types of errors. We can also think in terms of hypothesis testing and fix that:
+
+- Negative (-): **Null hypothesis**
+
+- Positive (+): **Alternative hypothesis**
+
+In this case, if we fix a patient with the disease as positive, a false positive will be a patient who is actually negative but is incorrectly classified as sick. This type of corresponds to the first type of error ($\alpha$), that is rejecting the null hypothesis when it is true.
+
+On the other hand, if a patient is actually sick and is incorrectly classified as not sick, we have a false negative, which corresponds to the second type error ($\beta$), that is non rejecting the null hypothesis when this is false.
+
+Obviously, there is not always a balance between the two components of error, often we need to find the right trade-off.
+In this analysis, I think that is more important to **minimize false negatives** than false positives. In fact, if we generated more false negatives, it would mean not treating a person who is actually sick and therefore probably causing them to die. On the other side, if we generated more false positives, it would mean treating a patient who does not need it, because he is healthy. Maybe this problem could be solved with a enhanced analysis, possibly more in-depth for the actual evaluation of false positives, so as to be really sure if a person being held in hospital actually needs treatment.
+
+I think it is useful to follow this approach, because especially in diseases of easy and fast development such as tumors, classifying a patient as healthy when it is actually not it means subjecting the patient to an annual check-up (for example), but by then it may be too late to intervene with a cure.
+
+At this point, to minimize false negatives we consider **sensitivity**, that is the fraction of true positives correctly classified, since minimizing false negatives corresponds to maximizing true positives, this means that if a patient is actually sick (positive) I don't want to wrong classification. Obviously, we also want to keep the percentage of false positives under control, because we don't want to keep too many non-sick people in the hospital for further checks, because this would mean having more unnecessary costs and an overcrowding of the structure.
+
+For this reason, as the first goal we would want to maximize sensitivity, but we also try to get a good score for specificity. We can try to balance this trade-off with different threshold values.
+
+```{r, echo = F, message = F}
+## Select Features test
+x1_test  <- as.numeric(dat_test$texture_mean)
+x2_test  <- as.numeric(dat_test$area_mean)
+x3_test  <- as.numeric(dat_test$symmetry_mean)
+x6_test  <- as.numeric(dat_test$symmetry_se)
+x7_test  <- as.numeric(dat_test$fractal_dimension_se)
+x9_test  <- as.numeric(dat_test$symmetry_worst)
+
+## Select target variable
+y_test <- ifelse(as.numeric(dat_test$diagnosis) == 2, 1,0) 
+
+pred <- beta_hat_jags[1]*x1_test +
+  beta_hat_jags[2]*x2_test +
+  beta_hat_jags[3]*x3_test +
+  beta_hat_jags[4]*x6_test +
+  beta_hat_jags[5]*x7_test +
+  beta_hat_jags[6]*x9_test
+
+probs_pred <- exp(pred)/(1+exp(pred))
+
+## Predictions
+y_pred_05 <- rbinom(nrow(dat_test), 1, probs_pred)
+
+## Evaluation
+cm_05 <- confusionMatrix(factor(y_pred_05), factor(y_test),
+                         positive = "1")
+```
+
+```{r, echo = F}
+## Predictions for different thresholds
+y_pred_01 <- ifelse(probs_pred >= 0.1, 1, 0)
+y_pred_02 <- ifelse(probs_pred >= 0.2, 1, 0)
+y_pred_03 <- ifelse(probs_pred >= 0.3, 1, 0)
+y_pred_04 <- ifelse(probs_pred >= 0.4, 1, 0)
+y_pred_07 <- ifelse(probs_pred >= 0.7, 1, 0)
+y_pred_09 <- ifelse(probs_pred >= 0.9, 1, 0)
+
+## Evaluation
+cm_01 <- confusionMatrix(factor(y_pred_01), factor(y_test),
+                      positive = "1")
+cm_02 <- confusionMatrix(factor(y_pred_02), factor(y_test),
+                      positive = "1")
+cm_03 <- confusionMatrix(factor(y_pred_03), factor(y_test),
+                      positive = "1")
+cm_04 <- confusionMatrix(factor(y_pred_04), factor(y_test),
+                      positive = "1")
+cm_07 <- confusionMatrix(factor(y_pred_07), factor(y_test),
+                      positive = "1")
+cm_09 <- confusionMatrix(factor(y_pred_09), factor(y_test),
+                      positive = "1")
+```
+
+```{r, echo = F}
+## Style Function
+draw_confusion_matrix <- function(cm, title_cm = NULL){
+
+  layout(matrix(c(1,1,2)))
+  par(mar = c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n",
+       ylab = "", xaxt="n", yaxt="n")
+  title(title_cm, cex.main = 2)
+
+  ## Create the matrix 
+  rect(150, 430, 240, 370, col = color_plot[1])
+  text(195, 435, "0", cex = 1.2)
+  rect(250, 430, 340, 370, col = color_plot[2])
+  text(295, 435, "1", cex = 1.2)
+  text(125, 370, "Predicted", cex = 1.3,
+       srt = 90, font = 2)
+  text(245, 450, "Actual", cex = 1.3, font = 2)
+  rect(150, 305, 240, 365, col = color_plot[2])
+  rect(250, 305, 340, 365, col = color_plot[1])
+  text(140, 400, "0", cex = 1.2, srt = 90)
+  text(140, 335, "1", cex = 1.2, srt = 90)
+
+  ## Add in the cm results 
+  res <- as.numeric(cm$table)
+  text(195, 400, res[1], cex = 1.6, font = 2,
+       col = "white")
+  text(195, 335, res[2], cex = 1.6, font = 2,
+       col = "white")
+  text(295, 400, res[3], cex = 1.6, font = 2,
+       col = "white")
+  text(295, 335, res[4], cex = 1.6, font = 2,
+       col = "white")
+
+  ## Add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n",
+       xlab = "", ylab = "",
+       main = "Evaluation Performance",
+       xaxt = "n", yaxt = "n")
+  text(10, 85, names(cm$byClass[1]),
+       cex = 1.2, font = 2)
+  text(10, 70, round(as.numeric(cm$byClass[1]), 3),
+       cex = 1.2)
+  text(30, 85, names(cm$byClass[2]),
+       cex = 1.2, font = 2)
+  text(30, 70, round(as.numeric(cm$byClass[2]), 3),
+       cex = 1.2)
+  text(50, 85, names(cm$byClass[5]),
+       cex = 1.2, font = 2)
+  text(50, 70, round(as.numeric(cm$byClass[5]), 3),
+       cex = 1.2)
+  text(70, 85, names(cm$byClass[6]),
+       cex = 1.2, font = 2)
+  text(70, 70, round(as.numeric(cm$byClass[6]), 3),
+       cex = 1.2)
+  text(90, 85, names(cm$byClass[7]),
+       cex = 1.2, font = 2)
+  text(90, 70, round(as.numeric(cm$byClass[7]), 3),
+       cex = 1.2)
+
+  ## Add in the accuracy information 
+  text(30, 35, names(cm$overall[1]),
+       cex = 1.5, font = 2)
+  text(30, 20, round(as.numeric(cm$overall[1]), 3),
+       cex = 1.4)
+  text(70, 35, names(cm$overall[2]),
+       cex = 1.5, font = 2)
+  text(70, 20, round(as.numeric(cm$overall[2]), 3),
+       cex = 1.4)
+}  
+```
+
+It is really interesting to note how the value of the threshold can affect the classification error.
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.1)
+draw_confusion_matrix(cm_01,
+                    title_cm = "Confusion Matrix (t = 0.1)")
+```
+
+For $t = 0.1$, we have a very low false negative rate, which is reflected in a $sensitivity = 0.95$. This is a very good performance, if it were not for the fact that the $specificity < 0.50$, so it means we are more likely to classify a healthy patient if we assign them to a category at random (the probability is $\frac{1}{2}$) greater than using this method.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.2)
+draw_confusion_matrix(cm_02,
+                    title_cm = "Confusion Matrix (t = 0.2)")
+```
+
+For $t = 0.2$, we have a very low false negative rate, which is reflected in a $sensitivity = 0.93$. This is a very good performance, and we have an important improvement for the $specificity = 0.62$.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.3)
+draw_confusion_matrix(cm_03,
+                    title_cm = "Confusion Matrix (t = 0.3)")
+```
+
+For $t = 0.3$, we have a good performance on false negative rate, with a $sensitivity = 0.88$.We are also able to manage the false positive, with a $specificity = 0.65$.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.4)
+draw_confusion_matrix(cm_04,
+                    title_cm = "Confusion Matrix (t = 0.4)")
+```
+
+For $t = 0.4$, we have $sensitivity = 0.86$ and $specificity = 0.72$.
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.5)
+draw_confusion_matrix(cm_05,
+                    title_cm = "Confusion Matrix (t = 0.5)")
+```
+
+For $t = 0.5$, we have an interesting performance. Considering the false negative rate, we have a $sensitivity = 0.76$ and a $specificity = 0.76$.
+Compared to the previous case, we have a profit of four percentage points on the correct classification of non-sick patients (increase in $specificity\,\,\, by\,\,\, 0.72\,\, to\,\, 0.76$), but we are wrong in the classification of twenty-four positive patients out of a hundred (decrease in $sensitivity\,\,\, by\,\,\, 0.86\,\, to\,\, 0.76$)).
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.7)
+draw_confusion_matrix(cm_07,
+                    title_cm = "Confusion Matrix (t = 0.7)")
+```
+<p>&nbsp;</p>
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Confusion Matrix (t = 0.9)
+draw_confusion_matrix(cm_09,
+                    title_cm = "Confusion Matrix (t = 0.9)")
+```
+
+In the last two cases, we see how as the threshold increases, the sensitivity decreases, unlike the specificity and therefore we cannot consider these last two methods as optimal for the goal we want to achieve.
+
+At this point, it is clear that the choice is between $t = 0.2$ or $t = 0.3$. We decide for model with $t = 0.2$, which is the right compromise between the two goals, because surely we will have a lower number of false negatives compared to a small increase in false positives. Obviously, we will have a greater number of false positives, therefore people who *in vain* will wait for additional analyzes for the correct classification of their health status, but as they say in these cases **prevention is better than cure**.
+<p>&nbsp;</p>
+
+#### Receiver Operating Characteristic (ROC Curve)
+
+The ROC curve is a graphic scheme for a binary classifier, which can also be interpreted as a probability curve that plots the **sensitivity** and **(1 - specificity)** along the two axes, respectively represented by **True Positive Rate (TPR, fraction of true positives)** and **False Positive Rate (FPR, fraction of false positives)** - also known as Fall-Out - at various threshold values and separates the *signal* from the *noise*, allowing to study the relationships between instances actually positive (hit rate) and false alarms.
+
+Through the analysis of the curves, the discriminatory capacity of a classifier is assessed between a set of positive and negative samples, calculating the area under the ROC curve, or the **Area Under Curve** (AUC). The AUC value assumes values in the range [0;1] and *it is equivalent to the probability that the result of the classifier applied to an instance extracted at random from the group of positives is higher than that obtained by applying it to an instance extracted at random from the group of negatives*.
+
+In the following plot, we show specificity (the fraction of correctly classified true negatives) on the x-axis and sensitivity on the y-axis. We can derive these quantities with the following formulas:
+
+$True\, Positive\, Rate\, (TPR) = \frac{TP}{P} \,\,\,\,\,\,\,\, \,\,\,\,\,\, \,\,\,\,\, \,\,\,\,\,\,\,\, \,\,\,\,\,\, \,\,\,\,\, \,\,\,\,\,\,\,\, \,\,\,\,\,\, \,\,\,\,\,\,\,\,\,\, \,\,\,\,\,\, \,\,\,\,\,\,\,\, \,\,\,\,\,\,\,\,\,\,\, \,\,\,\,\,\,\,\,\,\, True\, Negative\, Rate\, (TNR) = \frac{TN}{N} = (1 - FPR)$
+<p>&nbsp;</p>
+
+```{r, echo = F, warning = F, message = F}
+## AUC (t = 0.1)
+roc_logit_01 <- roc(y_test, y_pred_01)
+
+## AUC (t = 0.2)
+roc_logit_02 <- roc(y_test, y_pred_02)
+
+## AUC (t = 0.3)
+roc_logit_03 <- roc(y_test, y_pred_03)
+
+## AUC (t = 0.4)
+roc_logit_04 <- roc(y_test, y_pred_04)
+
+## AUC (t = 0.5)
+roc_logit_05 <- roc(y_test, y_pred_05)
+
+## AUC (t = 0.7)
+roc_logit_07 <- roc(y_test, y_pred_07)
+
+## AUC (t = 0.9)
+roc_logit_09 <- roc(y_test, y_pred_09)
+```
+
+```{r, echo = F, message = F}
+## AUC table
+roc_df <- rbind(AUC = c(roc_logit_01$auc,
+                        roc_logit_02$auc,
+                        roc_logit_03$auc,
+                        roc_logit_04$auc,
+                        roc_logit_05$auc,
+                        roc_logit_07$auc,
+                        roc_logit_09$auc))
+colnames(roc_df) <- c("t = 0.1", "t = 0.2", "t = 0.3",
+                      "t = 0.4", "t = 0.5", "t = 0.7",
+                      "t = 0.9")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 11}
+## Roc Curve
+
+## t = 0.1
+roc_plot_01 <- ggroc(roc_logit_01, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.1)",
+                " (AUC = ",
+                round(roc_logit_01$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.2
+roc_plot_02 <- ggroc(roc_logit_02, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.2)",
+                " (AUC = ",
+                round(roc_logit_02$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.3
+roc_plot_03 <- ggroc(roc_logit_03, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.3)",
+                " (AUC = ",
+                round(roc_logit_03$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.4
+roc_plot_04 <- ggroc(roc_logit_04, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.4)",
+                " (AUC = ",
+                round(roc_logit_04$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.5
+roc_plot_05 <- ggroc(roc_logit_05, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.5)",
+                " (AUC = ",
+                round(roc_logit_05$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.7
+roc_plot_07 <- ggroc(roc_logit_07, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.7)",
+                " (AUC = ",
+                round(roc_logit_07$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.9
+roc_plot_09 <- ggroc(roc_logit_09, color = "steelblue",
+                     size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.9)",
+                " (AUC = ",
+                round(roc_logit_09$auc, 3), ")")) +
+  theme_grey()
+
+## Plot
+grid.arrange(roc_plot_01, roc_plot_02, roc_plot_03,
+             roc_plot_04, roc_plot_05, roc_plot_07,
+             roc_plot_09,
+             ncol = 3)
+```
+
+Even looking at the ROC curve, it seems obvious to choose a value of $t = 0.7$, which guarantees an $AUC = 0.80$. The problem, in this case, is that this value is given more by specificity than by sensitivity, which in fact is below 0.75.
+
+For this reason, we confirm the choice of $t = 0.2$, with $AUC = 0.77$, a $sensitivity = 0.93$ and a $specificity = 0.62$
+
+It is important to remember that the results obtained from this forecast are dependent on the specific split in training and testing done previously; this means that with another split procedure, that is with another training and test set, the performances will be different. For this reason, especially for future studies, a cross-validation method can be used to have a more robust and averaged evaluation of the method used.
+
+Here, we can see a summary of all metrics for the different thresholds:
+```{r, echo = F}
+## Summary performance
+
+## t = 0.1
+logit_01_metrics <- c(cm_01$byClass[1], cm_01$byClass[2],
+                      cm_01$byClass[5], cm_01$byClass[7],
+                      roc_logit_01$auc)
+## t = 0.2
+logit_02_metrics <- c(cm_02$byClass[1], cm_02$byClass[2],
+                      cm_02$byClass[5], cm_02$byClass[7],
+                      roc_logit_02$auc)
+## t = 0.3
+logit_03_metrics <- c(cm_03$byClass[1], cm_03$byClass[2],
+                      cm_03$byClass[5], cm_03$byClass[7],
+                      roc_logit_03$auc)
+## t = 0.4
+logit_04_metrics <- c(cm_04$byClass[1], cm_04$byClass[2],
+                      cm_04$byClass[5], cm_04$byClass[7],
+                      roc_logit_04$auc)
+## t = 0.5
+logit_05_metrics <- c(cm_05$byClass[1], cm_05$byClass[2],
+                      cm_05$byClass[5], cm_05$byClass[7],
+                      roc_logit_05$auc)
+
+## Table
+performance_df_logit <- rbind(logit_01_metrics,
+                              logit_02_metrics,
+                              logit_03_metrics,
+                              logit_04_metrics,
+                              logit_05_metrics)
+## Set names
+rownames(performance_df_logit) <- c("t = 0.1", "t = 0.2",
+                                    "t = 0.3", "t = 0.4",
+                                    "t = 0.5")
+colnames(performance_df_logit)[5] <- "AUC" 
+
+## Check
+kable(performance_df_logit) %>% 
+  kable_styling() %>% 
+  row_spec(2, bold = T, color = "white",
+           background = "steelblue")
+```
+<p>&nbsp;</p>
+
+#### <a id = "second_model"> Second Model </a>
+
+At this point, using the set of features of the reduced model, we want to implement another linear classifier, namely a probit model to study its diagnostics and forecasting capacity.
+
+We have implemented the model using Rjags, as follow:
+```{r, message = F, warning = F}
+## Model Probit
+model_probit <- function(){
+  # Likelihood
+  for (i in 1:N){
+    y[i] ~ dbern(p[i])
+    p[i] <- phi(beta1*x1[i] + beta2*x2[i] +
+      beta3*x3[i] + beta6*x6[i] + beta7*x7[i] +
+      beta9*x9[i])}
+  
+  ## Defining the prior beta parameters
+  beta1  ~ dnorm(0, 1.0E-6)
+  beta2  ~ dnorm(0, 1.0E-6)
+  beta3  ~ dnorm(0, 1.0E-6)
+  beta6  ~ dnorm(0, 1.0E-6)
+  beta7  ~ dnorm(0, 1.0E-6)
+  beta9  ~ dnorm(0, 1.0E-6)
+}
+```
+
+```{r, message = F, warning = F}
+## Passing the data for RJags
+data.jags_probit <- list("y" = y, "N" = N, "x1" = x1,
+                         "x2" = x2, "x3" = x3, "x6" = x6,
+                         "x7" = x7, "x9" = x9)
+## Defining parameters of interest to show after running RJags
+mod.params_probit <- c("beta1", "beta2", "beta3",
+                       "beta6", "beta7", "beta9")
+```
+
+```{r, message = F, warning = F}
+## Bayesian Approach
+## Run JAGS
+
+## Model Probit
+## Bayesian Approach
+mod_jags_probit <- jags(data = data.jags_probit,
+                        n.iter = 10000,
+                        model.file = model_probit,
+                        n.chains = 3,
+             parameters.to.save = mod.params_probit,
+                        n.burnin = 1000, n.thin = 10) 
+```
+
+#### Summary table of $\beta$ coefficients:
+```{r, echo = F}
+## Check
+kable(mod_jags_probit$BUGSoutput$summary, digits = 4) %>% 
+  kable_styling()
+```
+*DIC of the model  `r mod_jags_probit$BUGSoutput$DIC`.*
+<p>&nbsp;</p>
+
+#### <a id = "diagnostic_two"> Diagnostic </a>
+
+```{r, echo = F}
+## Get chains
+chainArray_pr     <- mod_jags_probit$BUGSoutput$sims.array
+mcmc_mod_probit   <- as.mcmc(chainArray_pr)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 1 Plot
+beta_1_df <- data.frame(beta_1 =
+                          chainArray_pr[,1,"beta1"],
+                        index = 1:900)
+## Trace Plot
+p42 <-ggplot(data = beta_1_df,aes(index, beta_1)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[1])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[1]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p43 <- ggplot(beta_1_df, aes(beta_1)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[1]))+
+  ggtitle(expression(paste("Density plot of ", beta[1])))
+
+## Autocorrelation
+b1_acf    <- acf(chainArray_pr[,1,"beta2"], plot = FALSE)
+b1_acf_df <- with(b1_acf, data.frame(lag, acf))
+p44 <- ggplot(data = b1_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[1])))
+
+## Check
+grid.arrange(p42, p43, p44, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 2 Plot
+beta_2_df <- data.frame(beta_2 = chainArray_pr[,1,"beta2"],
+                        index = 1:900)
+## Trace Plot
+p45 <-ggplot(data = beta_2_df,aes(index, beta_2)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[2])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[2]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p46 <-ggplot(beta_2_df, aes(beta_2)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[2]))+
+  ggtitle(expression(paste("Density plot of ", beta[2])))
+
+## Autocorrelation
+b2_acf    <- acf(chainArray_pr[,1,"beta2"], plot = FALSE)
+b2_acf_df <- with(b2_acf, data.frame(lag, acf))
+p47 <- ggplot(data = b2_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[2])))
+
+## Check
+grid.arrange(p45, p46, p47, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 3 Plot
+beta_3_df <- data.frame(beta_3 = chainArray_pr[,1,"beta3"],
+                        index = 1:900)
+## Trace Plot
+p48 <-ggplot(data = beta_3_df,aes(index, beta_3)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[3])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[3]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p49 <-ggplot(beta_3_df, aes(beta_3)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[3]))+
+  ggtitle(expression(paste("Density plot of ", beta[3])))
+
+## Autocorrelation
+b3_acf    <- acf(chainArray_pr[,1,"beta3"], plot = FALSE)
+b3_acf_df <- with(b3_acf, data.frame(lag, acf))
+p50 <- ggplot(data = b3_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[3])))
+
+## Check
+grid.arrange(p48, p49, p50, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 6 Plot
+beta_6_df <- data.frame(beta_6 = chainArray_pr[,1,"beta6"],
+                        index = 1:900)
+## Trace Plot
+p51 <-ggplot(data = beta_6_df,aes(index, beta_6)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[6])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[6]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p52 <-ggplot(beta_6_df, aes(beta_6)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[6]))+
+  ggtitle(expression(paste("Density plot of ", beta[6])))
+
+## Autocorrelation
+b6_acf    <- acf(chainArray_pr[,1,"beta6"], plot = FALSE)
+b6_acf_df <- with(b6_acf, data.frame(lag, acf))
+p53 <- ggplot(data = b6_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[6])))
+
+## Check
+grid.arrange(p51, p52, p53, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 7 Plot
+beta_7_df <- data.frame(beta_7 = chainArray_pr[,1,"beta7"],
+                        index = 1:900)
+## Trace Plot
+p54 <-ggplot(data = beta_7_df,aes(index, beta_7)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[7])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[7]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p55 <-ggplot(beta_7_df, aes(beta_7)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[7]))+
+  ggtitle(expression(paste("Density plot of ", beta[7])))
+
+## Autocorrelation
+b7_acf    <- acf(chainArray_pr[,1,"beta7"], plot = FALSE)
+b7_acf_df <- with(b7_acf, data.frame(lag, acf))
+p56 <- ggplot(data = b7_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[7])))
+
+## Check
+grid.arrange(p54, p55, p56, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 9 Plot
+beta_9_df <- data.frame(beta_9 = chainArray_pr[,1,"beta9"],
+                        index = 1:900)
+## Trace Plot
+p57 <-ggplot(data = beta_9_df,aes(index, beta_9)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[9])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[9]))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p58 <-ggplot(beta_9_df, aes(beta_9)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[9]))+
+  ggtitle(expression(paste("Density plot of ", beta[9])))
+
+## Autocorrelation
+b9_acf    <- acf(chainArray_pr[,1,"beta9"], plot = FALSE)
+b9_acf_df <- with(b9_acf, data.frame(lag, acf))
+p59 <- ggplot(data = b9_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[9])))
+
+## Check
+grid.arrange(p57, p58, p59, ncol = 3)
+```
+<p>&nbsp;</p>
+
+#### <a id = "pred_two"> The Predictions </a>
+
+Even for the probit model, we understand the optimal value of $t$, by looking at confusion matrix and ROC curve.
+```{r, echo = F}
+## Point Estimates
+chainMat_probit <- mod_jags_probit$BUGSoutput$sims.matrix
+
+## Point estimates
+beta_hat_jags_probit <- colMeans(chainMat_probit)
+```
+
+```{r, echo = F}
+## Probit Model
+pred_probit <- beta_hat_jags_probit[1]*x1_test +
+  beta_hat_jags_probit[2]*x2_test +
+  beta_hat_jags_probit[3]*x3_test +
+  beta_hat_jags_probit[4]*x6_test +
+  beta_hat_jags_probit[5]*x7_test +
+  beta_hat_jags_probit[6]*x9_test
+
+probs_pred_probit <- exp(pred_probit)/(1+exp(pred_probit))
+
+## Predictions
+y_pred_05_probit <- rbinom(nrow(dat_test),
+                           1, probs_pred_probit)
+
+## Evaluation
+cm_probit_05 <- confusionMatrix(factor(y_pred_05_probit),
+                            factor(y_test), positive = "1")
+```
+
+```{r, echo = F}
+## Predictions for different thresholds
+y_pred_01_probit <- ifelse(probs_pred_probit >= 0.1, 1, 0)
+y_pred_02_probit <- ifelse(probs_pred_probit >= 0.2, 1, 0)
+y_pred_03_probit <- ifelse(probs_pred_probit >= 0.3, 1, 0)
+y_pred_04_probit <- ifelse(probs_pred_probit >= 0.4, 1, 0)
+
+## Evaluation
+cm_probit_01 <- confusionMatrix(factor(y_pred_01_probit),
+                                factor(y_test),
+                                positive = "1")
+cm_probit_02 <- confusionMatrix(factor(y_pred_02_probit),
+                                factor(y_test),
+                                positive = "1")
+cm_probit_03 <- confusionMatrix(factor(y_pred_03_probit),
+                                factor(y_test),
+                                positive = "1")
+cm_probit_04 <- confusionMatrix(factor(y_pred_04_probit),
+                                factor(y_test),
+                                positive = "1")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Plot
+draw_confusion_matrix(cm_probit_01,
+                    title_cm = "Confusion Matrix Probit (t = 0.1)")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Plot
+draw_confusion_matrix(cm_probit_02,
+                    title_cm = "Confusion Matrix Probit (t = 0.2)")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Plot
+draw_confusion_matrix(cm_probit_03,
+                    title_cm = "Confusion Matrix Probit (t = 0.3)")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Plot
+draw_confusion_matrix(cm_probit_04,
+                    title_cm = "Confusion Matrix Probit (t = 0.4)")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 8}
+## Plot
+draw_confusion_matrix(cm_probit_05,
+                    title_cm = "Confusion Matrix Probit (t = 0.5)")
+```
+
+<p>&nbsp;</p>
+
+#### Receiver Operating Characteristic (ROC Curve)
+```{r, echo = F, warning = F, message = F}
+## AUC (t = 0.1)
+roc_probit_01 <- roc(y_test, y_pred_01_probit)
+
+## AUC (t = 0.2)
+roc_probit_02 <- roc(y_test, y_pred_02_probit)
+
+## AUC (t = 0.3)
+roc_probit_03 <- roc(y_test, y_pred_03_probit)
+
+## AUC (t = 0.4)
+roc_probit_04 <- roc(y_test, y_pred_04_probit)
+
+## AUC (t = 0.5)
+roc_probit_05 <- roc(y_test, y_pred_05_probit)
+```
+
+```{r, echo = F, message = F}
+## AUC table
+roc_df_probit <- rbind(AUC = c(roc_probit_01$auc,
+                               roc_probit_02$auc,
+                               roc_probit_03$auc,
+                               roc_probit_04$auc,
+                               roc_probit_05$auc))
+colnames(roc_df_probit) <- c("t = 0.1", "t = 0.2",
+                             "t = 0.3", "t = 0.4",
+                             "t = 0.5")
+```
+
+```{r, echo = F, fig.align = "center", warning = F, fig.height = 6, fig.width = 10}
+## Roc Curve
+
+## t = 0.1
+roc_plot_01_probit <- ggroc(roc_probit_01,
+                      color = "steelblue", size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.1)",
+                " (AUC = ",
+                round(roc_probit_01$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.2
+roc_plot_02_probit <- ggroc(roc_probit_02,
+                      color = "steelblue", size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.2)",
+                " (AUC = ",
+                round(roc_probit_02$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.3
+roc_plot_03_probit <- ggroc(roc_probit_03,
+                      color = "steelblue", size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.3)",
+                " (AUC = ",
+                round(roc_probit_03$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.4
+roc_plot_04_probit <- ggroc(roc_probit_04,
+                      color = "steelblue", size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.4)",
+                " (AUC = ",
+                round(roc_probit_04$auc, 3), ")")) +
+  theme_grey()
+
+## t = 0.5
+roc_plot_05_probit <- ggroc(roc_probit_05,
+                      color = "steelblue", size = 1.3) +
+  ggtitle(paste0("ROC Curve (t = 0.5)",
+                " (AUC = ",
+                round(roc_probit_05$auc, 3), ")")) +
+  theme_grey()
+
+## Plot
+grid.arrange(roc_plot_01_probit, roc_plot_02_probit,
+             roc_plot_03_probit, roc_plot_04_probit,
+             roc_plot_05_probit, ncol = 2)
+```
+
+
+For the probit model, the correct choice would seem to be $t = 0.3$, with $sensitivity = 0.93$ and $specificity = 0.55$.
+
+Here, we can see a summary of all metrics for the different thresholds:
+```{r, echo = F}
+## Summary performance
+
+## t = 0.1
+probit_01_metrics <- c(cm_probit_01$byClass[1],
+                       cm_probit_01$byClass[2],
+                       cm_probit_01$byClass[5],
+                       cm_probit_01$byClass[7],
+                       roc_probit_01$auc)
+## t = 0.2
+probit_02_metrics <- c(cm_probit_02$byClass[1],
+                       cm_probit_02$byClass[2],
+                       cm_probit_02$byClass[5],
+                       cm_probit_02$byClass[7],
+                       roc_probit_02$auc)
+## t = 0.3
+probit_03_metrics <- c(cm_probit_03$byClass[1],
+                       cm_probit_03$byClass[2],
+                       cm_probit_03$byClass[5],
+                       cm_probit_03$byClass[7],
+                       roc_probit_03$auc)
+## t = 0.4
+probit_04_metrics <- c(cm_probit_04$byClass[1],
+                       cm_probit_04$byClass[2],
+                       cm_probit_04$byClass[5],
+                       cm_probit_04$byClass[7],
+                       roc_probit_04$auc)
+## t = 0.5
+probit_05_metrics <- c(cm_probit_05$byClass[1],
+                       cm_probit_05$byClass[2],
+                       cm_probit_05$byClass[5],
+                       cm_probit_05$byClass[7],
+                       roc_probit_05$auc)
+
+## Table
+performance_df_probit <- rbind(probit_01_metrics,
+                              probit_02_metrics,
+                              probit_03_metrics,
+                              probit_04_metrics,
+                              probit_05_metrics)
+## Set names
+rownames(performance_df_probit) <- c("t = 0.1", "t = 0.2",
+                                     "t = 0.3", "t = 0.4",
+                                     "t = 0.5")
+colnames(performance_df_probit)[5] <- "AUC" 
+
+## Check
+kable(performance_df_probit) %>% 
+  kable_styling() %>% 
+  row_spec(3, bold = T, color = "white",
+           background = "steelblue")
+```
+<p>&nbsp;</p>
+
+As we can see, the diagnosis of the model tells us that the parameters reach convergence, as in the case of the logistic model. Even when comparing the DIC values, they are quite similar to each other.
+
+```{r, echo = F}
+## Bayesian Approach
+kable(rbind("Model Logit (complete)" =
+              mod_jags$BUGSoutput$DIC,
+            "Model Logit (reduced)" =
+              mod_jags2$BUGSoutput$DIC,
+            "Model Probit (reduced)" =
+              mod_jags_probit$BUGSoutput$DIC),
+      col.names = "DIC", caption = "Bayesian Approach") %>% 
+  kable_styling()
+```
+
+We remember that $\beta_{logit} \approx 1.6 \times \beta_{probit}$ and they are very similar to the ones found with the logistic model.
+```{r, echo = F}
+## Check
+kable(cbind(Logit = beta_hat_jags,
+            Probit = beta_hat_jags_probit*1.6)) %>% 
+  kable_styling()
+```
+<p>&nbsp;</p>
+
+#### <a id = "simulated"> Recover model parameters with data simulated from the model </a>
+Now, we understood that the reduced logit is better than the reduced probit if we consider the predictions. So, for checking that the model proposed can correctly recover the model parameters we can execute the simulation considering the data simulated from the model proposed, the beta parameters checked are the estimated from the first model, considering these values we can continue with our last purpose:
+```{r, echo = F}
+## Sample size
+N <- nrow(dat)
+
+## Simulated data
+x1_simulation <- sample(x1, N, replace = T)
+x2_simulation <- sample(x2, N, replace = T)
+x3_simulation <- sample(x3, N, replace = T)
+x6_simulation <- sample(x6, N, replace = T)
+x7_simulation <- sample(x7, N, replace = T)
+x9_simulation <- sample(x9, N, replace = T)
+
+## Fixed model parameters
+beta1_sim <- mod_jags2$BUGSoutput$summary["beta1", "mean"]
+beta2_sim <- mod_jags2$BUGSoutput$summary["beta2", "mean"]
+beta3_sim <- mod_jags2$BUGSoutput$summary["beta3", "mean"]
+beta6_sim <- mod_jags2$BUGSoutput$summary["beta6", "mean"]
+beta7_sim <- mod_jags2$BUGSoutput$summary["beta7", "mean"]
+beta9_sim <- mod_jags2$BUGSoutput$summary["beta9", "mean"]
+
+lin_pred <- beta1_sim*x1_simulation +
+            beta2_sim*x2_simulation +
+            beta3_sim*x3_simulation +
+            beta6_sim*x6_simulation +
+            beta7_sim*x7_simulation +
+            beta9_sim*x9_simulation
+
+## Probability 
+pis <- exp(lin_pred)/(1+exp(lin_pred))
+
+## Simulated output
+y_simulation <- rbinom(N, 1, pis)
+```
+
+We have implemented the model using Rjags, as follow:
+```{r, message = F, warning = FALSE}
+## Model Logit (Simulated)
+model_simulated <- function(){
+  # Likelihood
+  for (i in 1:N){
+    y[i] ~ dbern(p[i])
+    logit(p[i]) <- beta1_sim*x1_simulation[i] +
+      beta2_sim*x2_simulation[i] +
+      beta3_sim*x3_simulation[i] +
+      beta6_sim*x6_simulation[i] +
+      beta7_sim*x7_simulation[i] +
+      beta9_sim*x9_simulation[i]}
+  
+  ## Defining the prior beta parameters
+  beta1_sim  ~ dnorm(0, 1.0E-6)
+  beta2_sim  ~ dnorm(0, 1.0E-6)
+  beta3_sim  ~ dnorm(0, 1.0E-6)
+  beta6_sim  ~ dnorm(0, 1.0E-6)
+  beta7_sim  ~ dnorm(0, 1.0E-6)
+  beta9_sim  ~ dnorm(0, 1.0E-6)
+}
+```
+
+```{r, message = F, warning = FALSE}
+## Passing the data for RJags
+data.jags_sim <- list("y" = y_simulation,
+                      "N" = N,
+                      "x1_simulation" = x1_simulation,
+                      "x2_simulation" = x2_simulation,
+                      "x3_simulation" = x3_simulation,
+                      "x6_simulation" = x6_simulation,
+                      "x7_simulation" = x7_simulation,
+                      "x9_simulation" = x9_simulation)
+## Defining parameters of interest to show after running RJags
+mod.params_sim <- c("beta1_sim", "beta2_sim", "beta3_sim",
+                    "beta6_sim", "beta7_sim", "beta9_sim")
+```
+
+```{r, message = F, warning = FALSE}
+## Bayesian Approach
+## Run JAGS
+
+## Model Logit Simulated
+mod_jags_sim <- jags(data = data.jags_sim,
+                 n.iter = 20000,
+                 model.file = model_simulated,      
+                 n.chains = 3, 
+                 parameters.to.save = mod.params_sim,
+                 n.burnin = 1000, n.thin = 20) 
+```
+
+Running Jags with 3 chains, 20000 iterations, a burn-in of 1000 steps and a thinning of 20 we have:
+<p>&nbsp;</p>
+
+As we can see, the parameters are very similar from the reduced logit and this model is able to get the model parameters correctly based on simulated data.
+<p>&nbsp;</p>
+
+#### Summary table of $\beta$ coefficients:
+```{r, echo = F}
+## Check
+kable(mod_jags_sim$BUGSoutput$summary, digits = 4) %>% 
+  kable_styling()
+```
+*DIC of the model  `r mod_jags_sim$BUGSoutput$DIC`.*
+<p>&nbsp;</p>
+
+##### Diagnostic
+```{r, echo = F}
+## Get chains
+chainArray_sim <- mod_jags_sim$BUGSoutput$sims.array
+mcmc_mod_sim   <- as.mcmc(chainArray_sim)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 1 Plot
+beta_1_df <- data.frame(beta_1 = chainArray_sim[,1,"beta1_sim"],
+                        index = 1:950)
+## Trace Plot
+p60 <-ggplot(data = beta_1_df,aes(index, beta_1)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[1])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[1], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p61 <-ggplot(beta_1_df, aes(beta_1)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[1]))+
+  ggtitle(expression(paste("Density plot of ", beta[1], " sim")))
+
+## Autocorrelation
+b1_acf    <- acf(chainArray_sim[,1,"beta2_sim"], plot = FALSE)
+b1_acf_df <- with(b1_acf, data.frame(lag, acf))
+p62 <- ggplot(data = b1_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[1], " sim")))
+
+## Check
+grid.arrange(p60, p61, p62, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 2 Plot
+beta_2_df <- data.frame(beta_2 = chainArray_sim[,1,"beta2_sim"],
+                        index = 1:950)
+## Trace Plot
+p63 <-ggplot(data = beta_2_df,aes(index, beta_2)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[2])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[2], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p64 <-ggplot(beta_2_df, aes(beta_2)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[2]))+
+  ggtitle(expression(paste("Density plot of ", beta[2], " sim")))
+
+## Autocorrelation
+b2_acf    <- acf(chainArray_sim[,1,"beta2_sim"], plot = FALSE)
+b2_acf_df <- with(b2_acf, data.frame(lag, acf))
+p65 <- ggplot(data = b2_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[2], " sim")))
+
+## Check
+grid.arrange(p63, p64, p65, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 3 Plot
+beta_3_df <- data.frame(beta_3 = chainArray_sim[,1,"beta3_sim"],
+                        index = 1:950)
+## Trace Plot
+p66 <-ggplot(data = beta_3_df,aes(index, beta_3)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[3])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[3], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p67 <-ggplot(beta_3_df, aes(beta_3)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[3]))+
+  ggtitle(expression(paste("Density plot of ", beta[3], " sim")))
+
+## Autocorrelation
+b3_acf    <- acf(chainArray_sim[,1,"beta3_sim"], plot = FALSE)
+b3_acf_df <- with(b3_acf, data.frame(lag, acf))
+p68 <- ggplot(data = b3_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[3], " sim")))
+
+## Check
+grid.arrange(p66, p67, p68, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 6 Plot
+beta_6_df <- data.frame(beta_6 = chainArray_sim[,1,"beta6_sim"],
+                        index = 1:950)
+## Trace Plot
+p69 <-ggplot(data = beta_6_df,aes(index, beta_6)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[6])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[6], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p70 <-ggplot(beta_6_df, aes(beta_6)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[6]))+
+  ggtitle(expression(paste("Density plot of ", beta[6], " sim")))
+
+## Autocorrelation
+b6_acf    <- acf(chainArray_sim[,1,"beta6_sim"], plot = FALSE)
+b6_acf_df <- with(b6_acf, data.frame(lag, acf))
+p71 <- ggplot(data = b6_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[6], " sim")))
+
+## Check
+grid.arrange(p69, p70, p71, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 7 Plot
+beta_7_df <- data.frame(beta_7 = chainArray_sim[,1,"beta7_sim"],
+                        index = 1:950)
+## Trace Plot
+p72 <-ggplot(data = beta_7_df,aes(index, beta_7)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[7])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[7], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p73 <-ggplot(beta_7_df, aes(beta_7)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[7]))+
+  ggtitle(expression(paste("Density plot of ", beta[7], " sim")))
+
+## Autocorrelation
+b7_acf    <- acf(chainArray_sim[,1,"beta7_sim"], plot = FALSE)
+b7_acf_df <- with(b7_acf, data.frame(lag, acf))
+p74 <- ggplot(data = b7_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[7], " sim")))
+
+## Check
+grid.arrange(p72, p73, p74, ncol = 3)
+```
+
+```{r, echo = F, fig.width = 12, fig.height = 2, fig.align = "center"}
+## Beta 9 Plot
+beta_9_df <- data.frame(beta_9 = chainArray_sim[,1,"beta9_sim"],
+                        index = 1:950)
+## Trace Plot
+p75 <-ggplot(data = beta_9_df,aes(index, beta_9)) +
+  geom_line(color = "blue") +
+  xlab("Iteration") +
+  ylab(expression(beta[9])) +
+  ggtitle(expression(paste("Trace-plot of ", beta[9], " sim"))) +
+  theme(plot.title.position = 'plot', 
+      plot.title = element_text(hjust = 0.5))
+
+## Density
+p76 <-ggplot(beta_9_df, aes(beta_9)) +
+  geom_density(col = "blue",
+               fill = rgb(0.1, 0.4, 0.5, 0.7),
+               alpha = 0.4)+
+  xlab(expression(beta[9]))+
+  ggtitle(expression(paste("Density plot of ", beta[9], " sim")))
+
+## Autocorrelation
+b9_acf    <- acf(chainArray_sim[,1,"beta9_sim"], plot = FALSE)
+b9_acf_df <- with(b9_acf, data.frame(lag, acf))
+p77 <- ggplot(data = b9_acf_df,
+              mapping = aes(x = lag, y = acf)) +
+  geom_bar(stat = "identity", position = "identity",
+           col = "blue",
+           fill = rgb(0.1, 0.4, 0.5, 0.7)) +
+  ggtitle(expression(paste("Autocorrelation plot of ",beta[9], " sim")))
+
+## Check
+grid.arrange(p75, p76, p77, ncol = 3)
+```
+<p>&nbsp;</p>
+
+#### <a id = "fd"> Final Discussion </a>
+After this analysis it is clear the importance of understanding the problem you are looking at rather than trying different methods to get the best performance. In fact, even with a simple logistic regression we have good metric values.
+
+Furthermore, it is also important to understand that it will be difficult to obtain a model that maximizes all the metrics in question, so we need to define the goal to be achieved and look at the metrics that interest us.
+<p>&nbsp;</p>
+
+#### <a id = "fw"> Future Work </a>
+Of course, we can try to improve performance in several ways:
+
+- resampling methods to balance the dataset.
+- consider a more complex model, maybe not a linear one.
+- use a set of different features or different priors for the parameters.
+- use cross-validation.
+<p>&nbsp;</p>
+
+#### <a id = "rf"> References </a>
+
+1. [Breast Cancer Wisconsin (Diagnostic) Dataset](https://www.kaggle.com/datasets/yasserh/breast-cancer-dataset)
+
+2. [Automatic Brain Tumor Segmentation from MRI using Greedy Snake Model and Fuzzy C-Means Optimization](https://reader.elsevier.com/reader/sd/pii/S1319157818313120?token=5865A516269F313F18123E32B7725D5A26119164264F42CB2D7E6A5135ABF6AD9DE20939A298DDFED1B9E2A66BC4C1B5&originRegion=eu-west-1&originCreation=20220714080742)
+
+3. [Application of Exploratory Data Analysis to Generate Inferences on the Occurrence of Breast Cancer using a sample Dataset](https://www.researchgate.net/publication/343489158_Application_of_Exploratory_Data_Analysis_to_Generate_Inferences_on_the_Occurrence_of_Breast_Cancer_using_a_Sample_Dataset)
+
+4. [Computerized Segmentation and Characterization of Breast Lesions in Dynamic Contrast-Enhanced MR Images Using Fuzzy c-Means Clustering and Snake Algorithm](https://www.hindawi.com/journals/cmmm/2012/634907/)
+
+5. [Nuclear Feature Extraction For Breast Tumor Diagnosis](https://www.researchgate.net/publication/2512520_Nuclear_Feature_Extraction_For_Breast_Tumor_Diagnosis)
+
+6. [The Application of Bayesian Methods in Cancer Prognosis and Prediction](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8717957/)
+
+7. [A Primer on Bayesian Inference for Biophysical Systems](https://reader.elsevier.com/reader/sd/pii/S0006349515003033?token=27FFA8A1AD711790F16EF4478FCF6F6FA9DF35CD56393768447D06C4C88076C7DC45741AE403B5FEEEDB008FE3C97320&originRegion=eu-west-1&originCreation=20220714081352)
+
+<p>&nbsp;</p>
